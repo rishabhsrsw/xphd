@@ -1,0 +1,15 @@
+numpy>=1.21
+
+[dev]
+pytest>=7
+matplotlib>=3.5
+
+[generate]
+netCDF4
+tqdm
+
+[plot]
+matplotlib>=3.5
+
+[yambo]
+netCDF4
