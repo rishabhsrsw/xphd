@@ -1,0 +1,473 @@
+% =====================================================================
+\section{Exciton-phonon linewidths}
+% =====================================================================
+\label{sec:lw}
+
+\subsection{Golden rule}
+To first order in the coupling and in the dilute limit, the full width at half
+maximum of state $\lambda$ at $\bQ$ is
+\begin{equation}
+\begin{split}
+\Gamma_{\lambda\bQ}(T)=2\pi\sum_{\beta\nu}\int_{\mathrm{BZ}}\frac{A_{\mathrm{uc}}\,d^2q}{(2\pi)^2}\,
+|\G_{\beta\lambda\nu}(\bQ,\bq)|^2
+&\Bigl[(N_{\nu\bq}+1)\,\delta\bigl(E_{\lambda\bQ}-E_{\beta\bQ+\bq}-\hbar\omega_{\nu\bq}\bigr)\\
+&+N_{\nu\bq}\,\delta\bigl(E_{\lambda\bQ}-E_{\beta\bQ+\bq}+\hbar\omega_{\nu\bq}\bigr)\Bigr],
+\end{split}
+\label{eq:fgr}
+\end{equation}
+the imaginary part of the Fan-Migdal self-energy, with the final-state exciton
+occupation set to zero. Since the zone has area $(2\pi)^2/A_{\mathrm{uc}}$, the
+measure is $A_{\mathrm{uc}}\,d^2q/(2\pi)^2=d^2\tilde q/\tilde A_{\mathrm{BZ}}=
+(2/\sqrt3)\,d^2\tilde q$ for $\tilde q$ in units of $\bb$, and
+$(1/N_q)\sum_{\bq}$ on a mesh. States within 2~meV are one manifold, their
+widths averaged; the 2.8~meV exchange-split bright doublet of GaN is reported
+state by state.
+
+\subsection{Linear-triangle integration}
+On the $24\times24$ mesh a Lorentzian or Gaussian $\delta$ would need a width
+large enough to make the result depend on it, and in two dimensions it blurs the
+kinematic thresholds. The $\delta$ functions are integrated analytically
+\cite{Jepsen1971,Lehmann1972}: each mesh cell is split into two triangles, and in
+each the energy difference $f=E_\lambda-E_\beta\mp\hbar\omega$ is linear between
+its vertex values $f_1\le f_2\le f_3$. The values of a linear function over a
+triangle of area $A_T$ are distributed with density
+\begin{equation}
+\rho_T(\varepsilon)=\frac{1}{A_T}\int_T\delta(\varepsilon-f)\,d^2r=
+\begin{cases}
+\dfrac{2(\varepsilon-f_1)}{(f_2-f_1)(f_3-f_1)}, & f_1\le\varepsilon<f_2,\\[1.5ex]
+\dfrac{2(f_3-\varepsilon)}{(f_3-f_1)(f_3-f_2)}, & f_2\le\varepsilon<f_3,\\[1ex]
+0 & \text{otherwise},
+\end{cases}
+\end{equation}
+normalised to $\int\rho_T\,d\varepsilon=1$. The integral of Eq.~(\ref{eq:fgr}) is
+then $\sum_T w_T A_T\rho_T(0)$, with $w_T$ the (piecewise-constant) weight
+$|\G|^2(N+1)$ or $|\G|^2N$ of that triangle. This is done on a mesh refined
+15-fold, to $360\times360$ (factor 30 for WSe$_2$), which needs the phonon and
+exciton energies there.
+
+\subsection{Inputs on the refined mesh}
+\emph{Phonons.} Diagonalising the DFPT dynamical matrices directly with
+\texttt{matdyn.x}, including the two-dimensional non-analytic correction that
+removes the spurious LO-TO splitting at $\Gamma$ \cite{Sohier2017}. They reproduce
+the source mesh to 1.7~$\mu$eV on all branches, apart from a 0.237~meV acoustic
+residue at $\Gamma$ removed by the acoustic sum rule.
+
+\emph{Exciton energies.} Exciton bands are indexed by ascending energy, so where
+two bands cross each indexed band has a kink. A global Fourier interpolant
+\cite{Koelling1986,Pickett1988} rings from every kink across the zone; at the
+$\bK$ minimum of GaN it made the band 34\% too steep and gave it a spurious
+twofold anisotropy. Each refined energy is instead taken from a quadratic about
+the nearest BSE point,
+\begin{equation}
+E(u,v)=E_0+g_1u+g_2v+Au^2+Buv+Dv^2,
+\end{equation}
+with $E_0$ the BSE energy and $(u,v)$ the reduced offset. The six neighbours lie
+at $\pm(h,0)$, $\pm(0,h)$, $\pm(h,-h)$. Sums over opposite pairs cancel the odd
+terms and fix the curvature exactly:
+\begin{equation}
+S_1\equiv E(h,0)+E(-h,0)-2E_0=2Ah^2,\quad S_2=2Dh^2,\quad S_3=2(A-B+D)h^2,
+\end{equation}
+so $A=S_1/2h^2$, $D=S_2/2h^2$, $B=(S_1+S_2-S_3)/2h^2$. Differences give three
+estimates of the gradient, $d_1=E(h,0)-E(-h,0)=2hg_1$, $d_2=2hg_2$ and
+$d_3=E(h,-h)-E(-h,h)=2h(g_1-g_2)$, each up to third-order terms. Minimising
+$(d_1-x)^2+(d_2-y)^2+(d_3-x+y)^2$ over $x=2hg_1$, $y=2hg_2$ gives
+\begin{equation}
+g_1=\frac{2d_1+d_2+d_3}{6h},\qquad g_2=\frac{d_1+2d_2-d_3}{6h}.
+\end{equation}
+The residual is the odd, trigonal-warping part of the band, third order in the
+offset. The quadratic reproduces $E_0$ exactly and its neighbours to third
+order, and because it uses only nearest neighbours a crossing affects only the
+cells next to it. Quadratic interpolation onto a refined mesh followed by
+linear-triangle integration is the hybrid tetrahedron scheme of MacDonald
+\emph{et al.} \cite{MacDonald1979,Dong2025}, here in two dimensions
+\cite{Wiesenekker1988}. We centre each quadratic on a mesh point rather than
+fitting one per triangle through its vertices and edge midpoints: such
+per-triangle quadratics are continuous but kinked at the vertices, and a band
+minimum always lies on a vertex.
+
+\emph{Tests.} On model bands with closed-form linewidths, the per-triangle
+scheme erred by up to 17\% at a minimum and the present one by at most 2.4\%; a
+crossing 150~meV above the minimum shifted the Fourier result by 35\% and the
+present one by 2\%. At the GaN $\bK$ minimum, fitting the curvature to the
+first, second and third shells of BSE points gives 12.44, 12.26 and
+12.18~eV$\,\bb^{-2}$. Predicting every other BSE point from the rest gives an rms
+error of \tbd{X}~meV for this scheme and \tbd{Y}~meV for Fourier interpolation
+(\texttt{compare\_band\_interp.py}). A Wannier representation of the exciton
+\cite{Haber2023} would treat crossings rigorously.
+
+\emph{Couplings.} $|\G|^2$ is constant within each coarse cell, except for the
+three acoustic branches in the cell around $\bq=0$, where the coupling vanishes
+at the cell's own mesh point. There we use the long-wavelength form
+$|\G|^2\,2\hbar\omega=Cq^2$ (i.e.\ $|\G|^2\propto q$ for a linear branch), with
+$C$ fitted for each pair of initial and final states to the innermost shell of
+the source mesh. Phonons below 0.5~meV are excluded. In \texttt{xphd linewidth}
+this is \texttt{--acoustic-model q2 --n-shell 1}; the default is \texttt{none}.
+
+\emph{Symmetry.} Each state's width is invariant under the point group, so
+Eq.~(\ref{eq:fgr}) is evaluated at the irreducible $\bQ$ (61 for $24\times24$,
+D$_{3h}$ with time reversal) and unfolded.
+
+\subsection{The band minimum in closed form}
+At the global minimum (GaN: $\bK$) no lower state exists; the width comes only
+from absorption of acoustic phonons within the valley, into final states inside
+the first mesh cell, where band and coupling are extrapolated. Model the valley
+as $E(q)=E_{\min}+bq^2$, the branch as $\hbar\omega=\hbar cq$ and the coupling
+as $|\G|^2\,2\hbar\omega=Cq^2$, with $q$ in units of $\bb$, following the
+deformation-potential treatment of exciton-acoustic-phonon scattering
+\cite{Kaasbjerg2013,Rudin1990,Selig2016}. Absorption from the bottom conserves
+energy when $E_{\min}+\hbar cq=E_{\min}+bq^2$, i.e.\ at
+\begin{equation}
+q^*=\frac{\hbar c}{b},\qquad \hbar\omega^*=\hbar cq^*=\frac{(\hbar c)^2}{b}
+\quad\bigl(=2Mc^2\ \text{for}\ b=\hbar^2/2M\bigr).
+\end{equation}
+Then, with the measure of Sec.~\ref{sec:lw}.1 and $d^2q=2\pi q\,dq$,
+\begin{align}
+\Gamma&=2\pi\cdot\frac{2}{\sqrt3}\int 2\pi q\,dq\;\frac{Cq}{2\hbar c}\,N(\hbar cq)\,
+\delta\bigl(bq^2-\hbar cq\bigr)
+=\frac{8\pi^2}{\sqrt3}\,\frac{Cq^{*2}}{2\hbar c}\,\frac{N(\hbar\omega^*)}{|2bq^*-\hbar c|}\nonumber\\
+&=\frac{4\pi^2}{\sqrt3}\,\frac{C\,q^{*2}}{(\hbar c)^2}\,N(\hbar\omega^*)
+=\frac{4\pi^2}{\sqrt3}\,\frac{C\,N(\hbar\omega^*)}{b^2},
+\label{eq:closed}
+\end{align}
+using $|2bq^*-\hbar c|=\hbar c$. Above $\hbar\omega^*/k_B$,
+$N\approx k_BT/\hbar\omega^*$ and $\Gamma\approx(4\pi^2/\sqrt3)\,Ck_BT/[b(\hbar c)^2]$
+grows linearly in $T$; below it the width freezes out. For GaN all inputs come
+from our data: $b=12.44$~eV$\,\bb^{-2}$, $c_{\mathrm{LA}}\approx\tbd{9.1}$~km/s,
+$\hbar\omega^*=1.49$~meV ($q^*=0.011\,\bb$), and $C$ from the minimum-to-minimum
+coupling (implying a deformation potential $\Xi\approx\tbd{8.4}$~eV; TA gives
+$10^{-3}$ of LA and ZA nothing, by parity). Equation~(\ref{eq:closed}) gives
+0.09, 10.6--11.4 and 45--48~meV at 5, 77 and 300~K (the range from extrapolating
+$C$ to $q\to0$); the code gives 0.087, 10.4 and 50.5~meV, the excess at 300~K
+being about 6~meV of absorption beyond the first cell. At 77~K the width exceeds
+$\hbar\omega^*$: the scattering is quasi-elastic and the line not strictly
+Lorentzian.
+
+\emph{Leaving the state versus leaving the valley.} The absorbed phonon moves the
+exciton by $|\bq^*|=0.011\,\bb$ inside its valley, with almost no change of
+energy. Excluding the first cell (\texttt{--acoustic-model none}) leaves the rate
+of scattering beyond it, the escape from the valley bottom: 0.044~meV at 77~K
+($\hbar/\Gamma\approx15$~ps) and \tbd{X}~meV at 300~K.
+
+\subsection{Off-diagonal self-energy and validity}
+The off-diagonal elements of the exciton-phonon self-energy \cite{Chan2023}
+change the absorption lineshape by less than \tbd{0.3}\%: the diagonal width of
+the lowest bright exciton (51.9~meV at 77~K) exceeds the largest off-diagonal
+element (\tbd{2.4}~meV) by a factor \tbd{22}. For the highest states, widths reach
+several hundred meV (lifetimes $\sim1$~fs, comparable to the band spacing); there
+Eq.~(\ref{eq:fgr}) no longer describes a sharp resonance.
+
+\emph{GaN values.} Bright state at $\Gamma$: 36.7, 51.9 and 150.9~meV at 5, 77 and
+300~K (12.7~fs at 77~K, 4.4~fs at 300~K; 99.8\% emission at 5~K, 43\% absorption
+at 300~K); its partner, 56.8~meV at 77~K. $\bK$ minimum: 0.087, 10.4 (63~fs) and
+50.5~meV (13~fs).
+
+% =====================================================================
+\section{Phonon-assisted luminescence and helicity}
+% =====================================================================
+\label{sec:pl}
+
+\subsection{Second-order emission}
+An exciton $\beta$ at momentum $\bq$ emits through a virtual bright state
+$\lambda$ at $\bQ=0$, emitting or absorbing a phonon $(\mu,\bq)$ that carries the
+momentum \cite{Cannuccia2019,Paleari2019}:
+\begin{equation}
+\begin{split}
+I^{\mathrm{PL}}(\omega;T)\propto\frac{1}{N_q}\sum_{\beta,\bq,\mu,\pm}
+&\Biggl|\sum_{\lambda}\frac{T_\lambda\,\G_{\lambda\beta\mu}(\bq,-\bq)}
+{E_{\beta\bq}\mp\hbar\omega_{\mu\bq}-E_{\lambda\mathbf{0}}}\Biggr|^2\\
+&\times N_{\beta\bq}(T_{\mathrm{exc}})\,F^{\pm}_{\mu\bq}(T)\,
+\delta\bigl(\hbar\omega-E_{\beta\bq}\pm\hbar\omega_{\mu\bq}\bigr),
+\end{split}
+\label{eq:pl}
+\end{equation}
+with $T_\lambda$ the dipole of the bright state,
+$N_{\beta\bq}\propto e^{-E_{\beta\bq}/k_BT_{\mathrm{exc}}}$ and
+$F^\pm=N_{\mu\bq}+\tfrac12\pm\tfrac12$. In GaN ($T=T_{\mathrm{exc}}=10$~K, 15
+states, six branches, 5~meV broadening) the spectrum below the direct line is a
+single satellite at 3.4129~eV, 16.1~meV below the dark $\bK$ exciton
+(3.4290~eV), matching the E$''_1$ branch at $\bK$ (16.2~meV); branch-resolved, it
+exceeds every other branch by seven orders of magnitude.
+
+\subsection{Helicity and valley}
+Replace $T_\lambda$ by $\hat{\boldsymbol\epsilon}_\pm^{*}\cdot\mathbf{d}_\lambda$ with
+$\hat{\boldsymbol\epsilon}_\pm=(\hat{\mathbf{x}}\pm i\hat{\mathbf{y}})/\sqrt2$ and the
+complex Cartesian dipoles $\mathbf{d}_\lambda$ of the $\bQ=0$ excitons, and
+separate the emitters $\beta$ by valley. The degree of circular polarisation is
+$P=(I_+-I_-)/(I_++I_-)$. Because $\hat{\boldsymbol\epsilon}_\pm$ form an
+orthonormal basis of the plane, for any amplitude vector $\mathbf{v}$,
+\begin{equation}
+|\hat{\boldsymbol\epsilon}_+^{*}\cdot\mathbf{v}|^2+|\hat{\boldsymbol\epsilon}_-^{*}\cdot\mathbf{v}|^2
+=|v_x|^2+|v_y|^2 ,
+\end{equation}
+so $I_++I_-$ equals the helicity-summed spectrum exactly (a sum rule checked to
+$3.7\times10^{-16}$ in GaN). Results: $P=-1.0000$ from $\bK$, $+1.0000$ from $\bK'$,
+equal valley intensities to 0.12\% (ratio 0.9988). The dipoles must come from a
+single BSE solution: with dipoles and eigenvectors from different runs, or with
+valleys summed, the helicity is lost. In hBN (class I) no valley-locked
+satellite is expected \tbd{(negative control to run)}.
+
+\subsection{Exciton dipoles and oscillator strengths}
+\texttt{xphd dipoles} builds $\mathbf{d}_\lambda=\sum_{vc\bk}A^{\lambda}_{vc\bk}\,
+\mathbf{d}_{cv}(\bk)$ from the single-particle dipoles of \texttt{ndb.dipoles}
+in the BSE window, rotated to the full zone like the envelopes (complex
+conjugated for time-reversed points). It is validated against
+\texttt{Yambo}'s oscillator strengths manifold by manifold: the ratio is the same
+constant (the unit conversion) for every manifold, with exchange-split pairs
+compared as sums. For the transport, \texttt{add\_osc.py} writes the in-plane
+strengths $|d_x|^2+|d_y|^2$ into the $\Gamma$ archive (field \texttt{osc\_Q0});
+$\sigma_h$-odd, $z$-polarised excitons receive none.
+
+% =====================================================================
+\section{Real-time exciton Boltzmann transport}
+% =====================================================================
+\label{sec:bte}
+
+\subsection{Equation and rates}
+For the occupations $F_i(t)$, $i\equiv(\lambda,\bQ)$
+\cite{Zhou2021Perturbo,Chen2020},
+\begin{equation}
+\frac{dF_i}{dt}=-\sum_j\Bigl[P_{ij}F_i(1+F_j)-P_{ji}F_j(1+F_i)\Bigr],
+\label{eq:bte}
+\end{equation}
+\begin{equation}
+P_{ij}=\frac{2\pi}{\hbar}\frac{1}{N_q}\sum_\nu|\G_{\beta\lambda\nu}(\bQ,\bq)|^2
+\Bigl[(N_{\nu\bq}+1)\,\delta(E_i-E_j-\hbar\omega_{\nu\bq})+N_{\nu\bq}\,\delta(E_i-E_j+\hbar\omega_{\nu\bq})\Bigr],
+\end{equation}
+with $\bq=\bQ_j-\bQ_i$. With the matrix elements, phonons and triangle weights of
+Sec.~\ref{sec:lw}, the row sums are the linewidths, $\sum_jP_{ij}=\Gamma_i/\hbar$;
+they agree to better than 0.1\% with Eq.~(\ref{eq:fgr}) evaluated on the same mesh
+(without the in-cell acoustic channel, which moves an exciton within its own
+cell and cannot move population between mesh states). The rate matrix couples
+different momenta, so it is assembled on the full zone: $576\times5=2880$ states
+for GaN.
+
+\subsection{Detailed balance}
+A transition $i\to j$ by emission is integrated over the triangle containing
+$\bq$, the reverse $j\to i$ by absorption over the one containing $-\bq$. The
+two energy-conserving surfaces are identical by time reversal, but linear
+interpolation gives them different areas $A^{\mathrm{em}}_{ij}\neq A^{\mathrm{abs}}_{ji}$,
+and the system then accumulates particles and never equilibrates. With the
+symmetrised weight $B_{ij}=\tfrac12(A^{\mathrm{em}}_{ij}+A^{\mathrm{abs}}_{ji})$,
+\begin{equation}
+P_{ij}=B_{ij}|\G|^2(N+1),\quad P_{ji}=B_{ij}|\G|^2N
+\ \Rightarrow\ \frac{P_{ij}}{P_{ji}}=\frac{N+1}{N}=e^{\hbar\omega/k_BT}=e^{(E_i-E_j)/k_BT}
+\end{equation}
+exactly, for every energy-conserving pair. The rates are written without
+dividing by $N$, which would amplify weakly populated channels. Particle number
+is conserved to $10^{-9}$.
+
+\emph{Stationary state.} With
+$F=1/(e^{(E-\mu)/k_BT}-1)$, $F/(1+F)=e^{-(E-\mu)/k_BT}$, so
+$P_{ij}F_i(1+F_j)=P_{ji}F_j(1+F_i)$ is exactly the ratio above: every pair is
+balanced, and the Bose-Einstein distribution is stationary (verified to
+$10^{-16}$); at these densities it is Boltzmann.
+
+\subsection{Refining the rates}
+The full matrix cannot be refined like a linewidth (each refined $\bq$ is a new
+state; the size grows as the fourth power of the refinement), but its row sums
+are ordinary zone integrals. With $s_i$ the ratio of the row sum on a fivefold
+finer mesh to the coarse one, the matrix is rescaled as
+$P_{ij}\to P_{ij}\sqrt{s_is_j}$, which leaves $P_{ij}/P_{ji}$ unchanged. A
+one-sided rescaling $P'_{ij}=s_iP_{ij}$ would not: detailed balance
+$P'_{ij}F_i=P'_{ji}F_j$ then gives $F_i/F_j=(s_j/s_i)\,e^{-(E_i-E_j)/k_BT}$, i.e.\
+$F_i\propto e^{-E_i/k_BT}/s_i$, the wrong equilibrium. Without the correction the
+coarse rates are low by \tbd{2.5}\%; with it they match the refined reference to
+\tbd{X}\%. The thermalisation time is set by the refined row sums; the
+branching ratios vary smoothly with $\bq$.
+
+\subsection{Initial condition, integration, diagnostics}
+Optical injection fills $\bQ=0$:
+$F_\lambda(0)\propto|\mu_\lambda|^2\exp[-(E_\lambda-E_{\mathrm{pump}})^2/2\sigma^2]$
+\tbd{(pump as in the main text)}, normalised to the injected density; results are
+unchanged from $10^{-4}$ to $10^{-2}$ per state (linear regime). Equation~(\ref{eq:bte})
+is stiff and is integrated with an implicit BDF solver (relative and absolute
+tolerances $10^{-7}$ and $10^{-12}$); occupations far above the minimum can dip to
+$-10^{-15}$, an integrator artefact. Two decompositions are reported: the filling
+rate $\sum_jP^{(c)}_{ji}F_j$ of a state by channel $c$, and the aggregate flux
+$\sum_{ij}F_iP^{(c)}_{ij}$; a channel can fill many sparsely populated states yet
+carry little flux.
+
+\subsection{Results and the finite-temperature equilibrium}
+GaN at 77~K: the population relaxes to 4.26~meV above the minimum, against a
+Boltzmann value of 4.09~meV on the same states. Both lie below $k_BT=6.6$~meV, the
+value for a two-dimensional continuum, because the nearest mesh states around
+$\bK$ lie $b h^2=22$~meV above it. Of the population, 35, 50, 90 and 99\% reaches
+the $\bK$, $\bK'$ valleys (within $0.12\,\bb$) by 30, 41, 98 and 172~fs; it then
+escapes the valley bottom at 0.044~meV (15~ps), although each $\bK$ state loses
+coherence in 63~fs. The valleys fill mainly through the fourth branch in its
+in-plane, LA-like form: valley and feeding states are both $\sigma_h$-odd, so the
+phonon must be even.
+
+At a temperature where $k_BT$ is comparable to the energy of the first shell of
+mesh points around the minimum, the equilibrium on the mesh is not concentrated
+on the minimum's own point: a light exciton at 300~K can hold only
+$\sim20\%$ there (\texttt{check\_bte.py} prints the share at the minimum's point and
+in each valley against Boltzmann on the same states). A run has settled when it
+matches Boltzmann; equal emission and absorption flux for every branch is the
+same statement. The hBN run at 300~K behaves this way.
+
+% =====================================================================
+\section{Quasiparticle corrections: decomposition and use}
+% =====================================================================
+\label{sec:gw}
+
+\subsection{Newton solution and its parts}
+\texttt{Yambo}'s linearised quasiparticle equation is
+\begin{equation}
+E=E_o+Z\bigl[\Sigma_x+\mathrm{Re}\,\Sigma_c(E_o)-V_{xc}\bigr],\qquad
+Z=\bigl[1-\partial_\omega\mathrm{Re}\,\Sigma_c|_{E_o}\bigr]^{-1},
+\end{equation}
+so a correction splits into an exchange part $Z(\Sigma_x-V_{xc})$ and a
+correlation part $Z\,\Sigma_c(E_o)$. With \texttt{ExtendOut} every term is
+printed (columns \texttt{Vxc}, \texttt{Vnlxc}$=\Sigma_x$, \texttt{Sc|Eo},
+\texttt{Re(Z)}), and the equation reproduces the \texttt{E-Eo} column exactly.
+Columns must be read by their header names: the layout is
+\texttt{K-point, Band, Eo, E, E-Eo, \ldots}, and taking the fourth column for
+$E-E_o$ once produced a false diagnosis (see the errata).
+\texttt{qp\_decompose.py} and \texttt{cb\_splitting.py} read by name.
+
+\subsection{WSe$_2$ without RIM-W}
+Band edges (\texttt{cb\_splitting.py}): the gap is \emph{direct} at $\bK$, 2.422~eV
+(VBM band 62 at $-1.1195$~eV, CBM band 64 at 1.3021~eV); the Q valley (the
+$\Gamma$-$\bK$ midpoint) lies 0.451~eV above $\bK$ (DFT: 0.064~eV), so the
+indirect K$\to$Q gap is 2.872~eV. The decomposition, in eV:
+\begin{center}\small
+\begin{tabular}{lccc}
+\toprule
+difference & total & exchange $Z(\Sigma_x-V_{xc})$ & correlation $Z\Sigma_c$\\
+\midrule
+gap at $\bK$ (62$\to$63) & $+1.181$ & $+3.135$ & $-1.954$\\
+Q against $\bK$ (band 63) & $+0.368$ & $+0.178$ & $+0.191$\\
+band 64 $-$ band 63 at $\bK$ & $-0.055$ & $-0.196$ & $+0.140$\\
+\bottomrule
+\end{tabular}
+\end{center}
+The gap behaves normally: correlation closes about 60\% of the exchange opening.
+Two features disagree with the established picture of WSe$_2$. Both parts push
+Q up against $\bK$, whereas the reference picture has Q at or below $\bK$ (an
+indirect K$\to$Q gap, the lowest exciton the K-Q state at $\mathbf{M}$). And the
+conduction spin splitting at $\bK$ reverses ($+37.2$~meV in DFT, $-18.2$~meV in
+GW): exchange stabilises band 64, which has the spin of the valence maximum,
+whereas the dark exciton of WSe$_2$ lying below the bright one requires the
+opposite-spin band lower. With spin-orbit coupling, 200 bands in the response
+and the self-energy amount to about 100 spinless bands; band convergence, and
+the lattice constant (3.322~\AA\ against 3.28~\AA\ experimental), are the open
+suspects \tbd{(tests pending)}.
+
+\subsection{Using corrections in the BSE}
+A rigid scissor shifts every conduction band equally and keeps DFT's valley
+offsets and spin splittings: adequate within a valley, wrong between valleys.
+\texttt{KfnQPdb} applies the $k$-dependent corrections correctly; the check is
+the report's \texttt{[K+QP]} gap, which must equal the Kohn-Sham gap plus the
+correction at that $k$. For WSe$_2$, RIM-W had to be off in both the GW and the
+BSE (it removed the binding in the BSE kernel and reduced the GW gap correction
+at $\bK$ from 1.18 to 0.10~eV); GaN and hBN ran correctly with it.
+
+% =====================================================================
+\section{WSe$_2$: deferred, and how to resume}
+% =====================================================================
+\label{sec:wse2}
+
+WSe$_2$ is out of the GaN/hBN paper and kept in the package for a later paper
+on transition-metal dichalcogenides. Paths: \texttt{D:\textbackslash Data\textbackslash WSe2\textbackslash}
+with \texttt{LELPH} (SAVE, \texttt{ph.save}, \texttt{ndb.elph}), \texttt{GW},
+\texttt{BSE}, \texttt{EXCPH} (Dmats, archives, parity files) and the phonon
+folder with \texttt{copy.sh} and the \texttt{wse2\_matdyn} inputs.
+
+\subsection{What is established}
+\begin{itemize}[nosep,leftmargin=1.2em]
+\item Spin-orbit symmetry machinery: $\langle D(\sigma_h)^2\rangle=-1.0000$; band
+labels from $\pm i$, undetermined only at the Kramers points; phonon parity by
+permutation ($\pi=[0,2,1]$), exact to $7\times10^{-16}$; every $\bQ=0$ exciton
+$\pm1$.
+\item Archive symmetry: $1.2\times10^{-3}$ (time reversal), $1.0\times10^{-3}$
+(C$_3$).
+\item Selection rule: $1.8\times10^{-7}$ and $1.4\times10^{-7}$ at tolerance
+0.96; $6.3\times10^{-6}$ with manifold rotation (state 1). The residue at the
+default tolerance is one solver-mixed pair; 25\% of manifold eigen-parities stay
+short of $\pm1$ for a reason not yet found (state cut and manifold width ruled
+out; window closure to test).
+\item For WSe$_2$, RIM-W must be off in the GW and the BSE (it works for GaN and
+hBN; the cause is not isolated); \texttt{KfnQPdb} works.
+\end{itemize}
+
+\subsection{What is open}
+\begin{itemize}[nosep,leftmargin=1.2em]
+\item The GW (no RIM-W, 200 bands, $a=3.322$~\AA, $12\times12$): direct gap at $\bK$
+(2.42~eV), Q 0.43--0.45~eV above $\bK$, conduction spin splitting at $\bK$ reversed
+($+37$~meV in DFT, $-18$~meV after GW).
+\item Two published pictures. Mishra \emph{et al.} [PRB \textbf{98}, 045143 (2018)]:
+fully relativistic ONCV with W 5$s$5$p$4$f$ semicore, PBE, $a=3.3175$~\AA, 18$\times$18
+DFT mesh; G$_0$W$_0$ gap 2.19~eV, direct; Q lifted from 44 to 394~meV above $\bK$ (as
+here); conduction splitting at $\bK$ kept at $+40$~meV. Chen, Sangalli and Bernardi
+[PRR \textbf{4}, 043203 (2022)]: $a=3.27$~\AA; exciton minima at $\mathbf{M}$ and Q.
+\item Reading: the Q--$\bK$ offset agrees with Mishra \emph{et al.}; the difference from
+Bernardi is mainly the lattice constant (compressive strain lowers Q relative to $\bK$,
+about 100~meV per \% in the bilayer), i.e.\ pseudopotential and functional. The
+reversed conduction splitting is ours alone: an exchange effect ($Z\Delta\Sigma_x=-0.196$~eV
+between the spin partners) to be checked against the W semicore and the $\Sigma_x$
+cutoff. The gap (2.42 against 2.19~eV) is a mesh question.
+\item Consequently the exciton landscape, the archives and everything downstream
+are not yet trustworthy for WSe$_2$.
+\end{itemize}
+
+\subsection{Resume, in order}
+\begin{enumerate}[nosep,leftmargin=1.4em]
+\item \textbf{Pseudopotential and exchange} (cheap, settles the conduction order): check
+the W valence configuration in the UPF header (5$s$5$p$ and 4$f$ semicore?); run
+Hartree-Fock only (\texttt{yambo -x}) at $k=19$, bands 62--64, with \texttt{EXXRLvcs}
+at 70, 100 and 140~Ry and watch $\Sigma_x(64)-\Sigma_x(63)$.
+\item \textbf{Lattice constant}: DFT bands at $a=3.27$ and 3.28~\AA\ (scf + nscf only) to
+see how far Q moves; G$_0$W$_0$ at Q and $\bK$ only if it changes the picture.
+\item \textbf{GW band convergence} at $k=13$ (Q) and 19 ($\bK$) only:
+\texttt{QPkrange} \texttt{13|13|62|64|} and \texttt{19|19|62|64|}; \texttt{BndsRnXp}
+and \texttt{GbndRnge} at 200, 400, 600 (spinor bands; nscf with enough bands);
+\texttt{rim\_cut} on, \texttt{rim\_w} off. After each: \texttt{cb\_splitting.py}
+(Q$-$K offset; 64$-$63 at $\bK$) and \texttt{qp\_decompose.py}.
+\item \textbf{Mesh}: G$_0$W$_0$ on $18\times18$ (Q and $\bK$ are mesh points) for the gap.
+\item \textbf{Full GW} at the converged settings, all 19 $k$, bands 59--66.
+\item \textbf{BSE} with \texttt{KfnQPdb= "E < GW/ndb.QP"}, no \texttt{rim\_w},
+\texttt{BSSmod= "d"}, all 19 $\bQ$. Check the report's \texttt{[K+QP]} gap against
+\texttt{cb\_splitting.py}; \texttt{exc\_transitions.py} at $\bQ=\mathbf{M}$
+(\texttt{ndb.BS\_diago\_Q7}): is the lowest state a K-$\Lambda$ exciton?
+\item \textbf{Symmetry}: \texttt{xphd parity --manifold-tol 0.005}; \texttt{window\_closure.py}
+(\texttt{SIGMA\_H\_OP = 6}); \texttt{manifold\_closure.py}.
+\item \textbf{Archives and analysis}: \texttt{xphd dmats}; \texttt{xphd generate}
+(states enough to close the manifolds); \texttt{check-archive}; \texttt{labels\_from\_elph.py};
+\texttt{selection-rule --rotate}; then linewidths, \texttt{add\_osc.py}, the BTE and
+the maps as in Part~I, Sec.~9.2 (read with the errata).
+\end{enumerate}
+
+% =====================================================================
+\section{Validation summary}
+% =====================================================================
+\label{sec:summary}
+
+\begin{table}[h]
+\centering\small
+\begin{tabular}{p{6.2cm}p{4.6cm}p{5.4cm}}
+\toprule
+Check & Result & Where\\
+\midrule
+Exciton parity, $|\chi|=1$ & 100\% of states (GaN) & Sec.~\ref{sec:excparity}\\
+Selection rule, forbidden/allowed & $5\times10^{-7}$ (GaN); $1.8\times10^{-7}$ (WSe$_2$, tol 0.96) & Sec.~\ref{sec:parity}\\
+Star uniformity $T_{\max}/T_{\min}$ & 1.0001 (GaN) & Sec.~\ref{sec:excph}\\
+Manifold-resolved symmetry, TR / C$_3$ & $1.3/3.3\times10^{-3}$ (GaN); $1.2/1.0\times10^{-3}$ (WSe$_2$) & Sec.~\ref{sec:excph}\\
+Phonons, matdyn vs source mesh & 1.7~$\mu$eV & Sec.~\ref{sec:lw}\\
+$\bK$ minimum vs closed form, 77~K & 10.4 vs 10.6--11.4~meV & Sec.~\ref{sec:lw}\\
+Off-diagonal self-energy & $<\tbd{0.3}$\% of the lineshape & Sec.~\ref{sec:lw}\\
+Helicity sum rule; $P$ per valley & $3.7\times10^{-16}$; $\mp1.0000$ & Sec.~\ref{sec:pl}\\
+BTE row sums vs linewidths & $<0.1$\% & Sec.~\ref{sec:bte}\\
+BTE detailed balance; stationarity & machine precision; $10^{-16}$ & Sec.~\ref{sec:bte}\\
+BTE end state vs Boltzmann, 77~K & 4.26 vs 4.09~meV & Sec.~\ref{sec:bte}\\
+Spinor mirror, $\langle D(\sigma_h)^2\rangle$ & $-1.0000$ (WSe$_2$) & Sec.~\ref{sec:parity}\\
+Phonon parity by permutation & $\pm1$ to $7\times10^{-16}$ (WSe$_2$) & Sec.~\ref{sec:parity}\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\clearpage
+\phantomsection
+\addcontentsline{toc}{section}{References}
+\bibliographystyle{unsrtnat}
+\bibliography{partII}

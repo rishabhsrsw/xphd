@@ -1,1 +1,1549 @@
-# xphd
+# xphd 1.0.0
+
+*R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Information Technology, Allahabad*
+
+**X**citon–**Ph**onon **D**ynamics: exciton linewidths, scattering rates,
+symmetry and selection rules, optics, real-time transport and photoemission
+from a Quantum ESPRESSO + LetzElPhC + yambo workflow — together with the
+diagnostics that decide whether the numbers can be believed.
+
+The diagnostics are the point. Every check here exists because it caught
+something real: a gauge that was not smooth, a coupling paired with the wrong
+phonon frequency, a delta surface carried by a single triangle, a database
+opened at the wrong wavevector, a default lattice constant belonging to a
+different material.
+
+---
+
+## What's new in 1.0.0
+
+- **A start-up banner**, in the spirit of yambo's: every `xphd` command prints
+  the lettering (the face changes from run to run), the version, and the command
+  line. Never for `--help` / `--version`; `XPHD_NO_BANNER=1` switches it off.
+- **Spin-orbit and non-planar layers**: spinor band labels from the +-i
+  eigenvalues of D(sigma_h); phonon parity from the atom permutation of the
+  mirror (`xphd.mirror`, `scripts/labels_from_elph.py`, `PERM` in the parity
+  plots); `soc_probe.py`.
+- **Near-degenerate manifolds**: `xphd parity --manifold-tol` stores the sigma_h
+  matrix inside each manifold; `xphd selection-rule --rotate` splits the coupling
+  by its eigen-parities, so solver-mixed states are not excluded.
+- **Symmetry checks of the archives**: `xphd check-archive` compares
+  manifold-summed |G|^2 at q against its time-reversal and C3 images
+  (`--detail` locates any mismatch; exchange-split doublets are grouped).
+- **Name-based reading of yambo output**: `cb_splitting.py` (band edges, direct
+  or indirect gap, conduction splitting) and `qp_decompose.py` (exchange vs
+  correlation) read `o-*.qp` by column name -- with `ExtendOut` the fourth
+  column is E, not E-Eo.
+- **New scripts**: `plot_coupling_maps.py`, `where_forbidden.py`,
+  `manifold_closure.py`, `window_closure.py`, `add_osc.py`, `exc_transitions.py`
+  (with Lambda valleys), `check_bte.py` and `valley_times.py` (with `CENTERS`).
+- **Documentation**: the handbook (`docs/xphd_handbook.pdf`): Part I the
+  package, Part II the methods and derivations, with references and errata.
+- **Your figure scripts** in `scripts/user/`, kept as you wrote them.
+
+See `CHANGELOG.md` for the full list.
+
+## Documentation
+
+- `docs/xphd_handbook.pdf` -- Part I: every command and script, conventions,
+  data files, material walkthroughs (GaN, hBN, WSe2), pitfalls, status. Part II:
+  methods and derivations (matrix elements, mirror parity and selection rules,
+  manifold rotation, triangle integration and the local-quadratic interpolation,
+  the band-minimum closed form, luminescence and helicity, the transport and its
+  detailed balance, quasiparticle decomposition), errata to Part I, references.
+- `docs/handbook_partII/` -- the LaTeX and BibTeX sources of Part II
+  (`pdflatex partII; bibtex partII; pdflatex partII; pdflatex partII`).
+- `scripts/user/README.md` -- your own figure scripts and their package
+  successors.
+
+---
+
+## Contents
+
+1. [What's new in 1.0.0](#whats-new-in-100)
+2. [Documentation](#documentation)
+3. [Install](#install)
+4. [The whole pipeline, in order](#the-whole-pipeline-in-order)
+5. [Material parameters](#material-parameters)
+6. [The workflow, stage by stage](#the-workflow-stage-by-stage)
+7. [Command reference — all 36](#command-reference--all-36)
+8. [Figure scripts](#figure-scripts)
+9. [From Python](#from-python)
+10. [Reading the diagnostics](#reading-the-diagnostics)
+11. [Convergence series](#convergence-series)
+12. [Method](#method)
+13. [Pitfalls this package handles](#pitfalls-this-package-handles)
+14. [Real-time BTE](#real-time-bte)
+15. [Layout](#layout)
+16. [References](#references)
+17. [Near-degenerate manifolds (`--manifold-tol`, `--rotate`)](#near-degenerate-manifolds---manifold-tol---rotate)
+
+---
+
+## Install
+
+```bash
+git clone <your-repo> xphd && cd xphd
+pip install -e ".[dev,plot]"
+xphd --version
+xphd --help                # lists all 36 commands
+xphd <command> --help      # every command documents its own arguments
+pytest                     # 153 tests need no yambopy; 3 more run when it is installed
+```
+
+`numpy` is the only hard requirement. `matplotlib` for figures, `scipy` for
+the BTE propagator and the Mott-Wannier estimate. `yambopy`, `netCDF4` and
+`tqdm` are needed only by the commands that read yambo databases — archive
+generation, symmetry, dipoles, chirality, photoemission — and are imported
+lazily, so `--help` works for every command without them. Two figure scripts
+also need the `colormaps` package.
+
+After unzipping a new version over an editable install, run
+`pip install -e .` once more so that `xphd --version` reports it. Every command
+prints a banner first; set `XPHD_NO_BANNER=1` to switch it off (batch logs).
+
+---
+
+## The whole pipeline, in order
+
+Every command, in the order a new material goes through them. Stages 4–7 are
+independent of each other once stage 3 is done. The sections that follow
+explain each step and what its output should look like.
+
+```bash
+# ---- 1. phonons on the refined mesh -----------------------------------------
+xphd matdyn-split --n 360 --chunks 48                 # qlist_000.txt ...
+#   run matdyn.x on each chunk (scripts/run_matdyn.sh does this and merges)
+xphd matdyn-merge --chunks 48 -o matdyn.modes --freq bn.freq
+xphd modes-check  --modes matdyn.modes --freq bn.freq --n 360
+xphd matdyn       bn.freq --fine 360 --nbnd 6 --npz GI_ExcPh_Q0001.npz -o hw_fine.npy
+
+# ---- 2. exciton-phonon archives --------------------------------------------
+xphd dmats            --nexc 15                        # Dmats.npy
+xphd ibz              --savepath ../phonons/SAVE       # which Q to generate
+xphd generate 0 archives --nexc 15                     # Gamma first
+xphd check-archive    archives/GI_ExcPh_Q0001.npz      # must print READY
+xphd check            archives/GI_ExcPh_Q0001.npz
+#   then every Q printed by `ibz` (scripts/run_generate.sh or .ps1)
+xphd verify-archives  --dir archives --n 576           # before any transport
+xphd mode-labels      --masses 10.81 14.007 --archive archives/GI_ExcPh_Q0001.npz
+
+# ---- 3. linewidths ------------------------------------------------------------
+xphd linewidth archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy \
+               --T 10 77 150 300 --acoustic-cut 5e-4 --acoustic-model q2 \
+               --n-shell 1 --per-mode -o lw_gamma.txt
+xphd sweep     'archives/GI_ExcPh_Q*.npz' --hw-fine hw_fine.npy --T 77 \
+               --acoustic-cut 5e-4 --acoustic-model q2 --n-shell 1 \
+               --workers 8 --unfold ../phonons/SAVE -o lw_77K.npz
+xphd unfold    lw_77K.npz --savepath ../phonons/SAVE -o lw_77K_sym.npz
+
+# ---- 4. symmetry --------------------------------------------------------------
+xphd parity           --nv 3 --nstates 15 --manifold-tol 0.005 -o parity.npz
+xphd irreps           --nv 3 --points G K M
+xphd selection-rule   --archive archives/GI_ExcPh_Q0001.npz --parity parity.npz \
+                      --labels mode_labels.npy --state 1 --by-final
+xphd selection-rule   ... --rotate     # split by the parity eigenstates of each
+                                       # near-degenerate manifold: nothing excluded
+xphd decompose-parity --nv 3 --parity parity.npz        # only if chi is fractional
+xphd band-parity      --nv 3 -o band_parity.npz         # the bands behind chi
+
+# ---- 5. optics ----------------------------------------------------------------
+xphd dipoles    -o exc_dipoles.npy
+xphd chirality  --dipoles exc_dipoles.npy --states 39 40
+xphd coherence  --pair 1 3
+xphd lineshape  archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --T 77 \
+                --bsdb ../BSE/output_all/ndb.BS_diago_Q1 -o eps2.npz
+xphd selfenergy archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --state 1 \
+                --T 77 -o sigma.npz
+
+# ---- 6. dynamics --------------------------------------------------------------
+xphd bte       'archives/GI_ExcPh_Q*.npz' --T 77 --refine 5 --hw-fine hw_fine.npy \
+               --inject optical --pump-center 5.475 --pump-sigma 0.018 \
+               --t-end 10000 --nt 200 --workers 14 --channels --snapshots snaps.npz
+xphd bte-check --archives 'archives/GI_ExcPh_Q*.npz' --field lw_77K_sym.npz \
+               --hw-fine hw_fine.npy --T 77
+xphd arpes     --temperature 300 -o arpes_300K.npz
+xphd arpes     --snapshots snaps.npz --time 30 -o arpes_30fs.npz
+
+# ---- 7. diagnostics, as needed -------------------------------------------------
+xphd channels         archives/GI_ExcPh_Q0001.npz --state 1 --T 77
+xphd frohlich         archives/GI_ExcPh_Q0001.npz
+xphd interference     archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --T 77
+xphd localization     archives/GI_ExcPh_Q0001.npz --hex 2.50
+xphd gauge            archives/GI_ExcPh_Q0001.npz --hex 2.50
+xphd check-parity-asr --labels mode_labels.npy --hw-fine hw_fine.npy --nv 3
+xphd validate-planar  --masses 10.81 14.007 --savepath ../phonons/SAVE
+xphd effective-mass   bands.gnu --band 4 --center 0.333
+xphd mott-wannier     --Eg-dir 7.3 --Eg-ind 7.1 --mu-dir 0.4 --mu-ind 0.5 --alpha 3.5
+```
+
+---
+
+## Material parameters
+
+Several commands need a number that belongs to one material. Take it from your own calculation; the hBN column's lattice constant in particular should be read from the relaxation, not copied from here. **None of them
+has a default**, because each was once defaulted to GaN and silently gave a
+wrong answer on another material — see [Pitfalls](#pitfalls-this-package-handles).
+
+| parameter | GaN (planar) | hBN | used by |
+|---|---|---|---|
+| lattice constant, Å | 3.23 | from your relaxed `scf.out` (≈ 2.5) | `--hex` (localization, gauge); `--alat` (bte_figure, bte_animate) |
+| atomic masses, amu | 69.723 14.007 | 10.81 14.007 | `--masses` (mode-labels, validate-planar) |
+| valence bands in the BSE window | 3 | 3 | `--nv` (parity, irreps, decompose-parity, check-parity-asr) |
+| BSE window, python slice | [6, 12] | [1, 7] | read from the BSE — never passed |
+| lowest exciton | K, 3.429 eV, dark | Γ, 5.475 eV, bright | — |
+| PL window, eV | 3.2 – 4.0 | 5.0 – 5.8 | `PL_EMIN`/`PL_EMAX` in scripts/fatbands_pl.py |
+
+`xphd generate` prints `nv=` and the BSE window when it loads the databases,
+and `xphd check-archive` prints `bse_nv` from the archive — read `--nv` from
+there rather than from memory.
+
+---
+
+## The workflow, stage by stage
+
+Everything below is per source mesh `N` (6, 8, 12, 18, 24). The **fine
+integration mesh is held fixed at 360×360 for every run**, so only one thing
+varies across a convergence series. 360 divides 6, 8, 12, 18 and 24 exactly.
+
+### 0. Upstream (Quantum ESPRESSO and yambo — not xphd's job)
+
+`pw.x` → `ph.x` on an `N x N x 1` q-mesh → `q2r.x` → `matdyn.x` on the
+360×360 mesh. The settings that must hold, or nothing downstream means
+anything:
+
+- `zasr='crystal'` in `q2r.x`, `asr='crystal'` in `matdyn.x`.
+- `loto_2d=.true.` in **both** — the 3D non-analytic form puts a spurious
+  ~15 meV splitting on the LO branch at Γ, the branch carrying the Fröhlich
+  coupling. `loto_2d=.false.` selects the 3D form rather than disabling the
+  correction.
+- In the `matdyn.x` namelist: `flvec` (without it there are no eigenvectors,
+  and parity, mode labels and selection rules all need them), `nosym=.true.`
+  (the full mesh, not the wedge), `q_in_band_form=.false.` (a list of points,
+  not path endpoints), and **a terminating `/`** — without it `matdyn.x`
+  blocks reading standard input and runs until the wall-clock limit with no
+  output at all.
+
+Then `p2y`, `lelphc -i lelphc.in` → `ndb.elph`, and the finite-Q BSE at every
+Q of the mesh.
+
+### 1. Phonons on the refined mesh
+
+`matdyn.x` is **serial** — it has no parallelisation over q-points, so
+`mpirun -np 48` leaves 47 cores idle. For a long q-list, split it and run the
+pieces concurrently:
+
+```bash
+xphd matdyn-split --n 360 --chunks 48 --prefix qlist
+```
+
+writes `qlist_000.txt …` and `chunk_index.txt`. The chunks are contiguous in
+the row-major order a single run would use, so merging reproduces that run
+exactly. `scripts/run_matdyn.sh` runs `matdyn.x` over them and merges in one
+job, refusing to start if the base namelist lacks its closing `/`. To merge by
+hand:
+
+```bash
+xphd matdyn-merge --chunks 48 --modes-prefix modes --freq-prefix freq \
+                  -o matdyn.modes --freq bn.freq --index chunk_index.txt
+```
+
+None of matdyn's three outputs survives a plain `cat`. `.modes` carries a
+`diagonalizing the dynamical matrix` header on **every** q-block, so it is
+concatenated as written; `.freq` begins with a `&plot nks=` namelist giving the
+total, which is written once with the counts summed; `.gp` restarts its
+cumulative distance at zero in every chunk, which is offset so the column is
+monotonic. The merge cross-checks all three against `chunk_index.txt` and
+refuses to write an incomplete mesh.
+
+Before anything uses the result:
+
+```bash
+xphd modes-check --modes matdyn.modes --freq bn.freq --n 360
+```
+
+checks the point count and duplicates, the acoustic residue at Γ (which sets
+`--acoustic-cut` later), imaginary frequencies, and **the out-of-plane weight
+of every mode**. In a planar layer σ_h is exact, so every mode is purely
+in-plane or purely out-of-plane: this must read ~100%. Planar GaN gives
+100.00% over 129 600 wavevectors. Anything lower means the structure is not
+planar or the eigenvector convention is not displacement — and the parity
+analysis cannot proceed.
+
+Then read the frequencies onto the archive mesh:
+
+```bash
+xphd matdyn bn.freq --fine 360 --nbnd 6 --npz GI_ExcPh_Q0001.npz -o hw_fine.npy
+```
+
+**Checkpoint.** `hw_grid` in the archive comes from the raw dynamical
+matrices; the refined frequencies have the ASR applied. Expect
+
+```
+  Gamma acoustic 0.0607 meV   (the ASR correction; matdyn's zeros are correct)
+  elsewhere      0.0022 meV   (2.2e-05 relative)
+```
+
+The Γ acoustic figure is the artefact being *removed*. "Elsewhere" should be
+microvolts; milli-electron-volts means the q-ordering is wrong:
+
+```bash
+xphd matdyn ... --q-order npz      # if the list follows q_red, not row-major
+```
+
+### 2. Exciton-phonon archives
+
+Needs yambopy, so usually on the cluster.
+
+```bash
+xphd dmats --bse-dir ../BSE/output_all --savepath ../phonons/SAVE \
+           --ndb-elph ../phonons/ndb.elph --nexc 15 --tag hBN
+```
+
+builds `Dmats.npy`, the electronic rotation matrices, once per system. The
+band window is **read from the BSE**, never set by hand, and the band
+dimension of the result is checked against it.
+
+Which Q to generate:
+
+```bash
+xphd ibz --savepath ../phonons/SAVE
+```
+
+prints the **0-based arguments for `xphd generate`**, built exactly as the
+generator builds its own — from `lat.kpoints_indexes`, in the lattice's
+k-ordering, which need not be row-major. It also lists the archive names these
+produce. On a 24×24 hexagonal mesh that is 61 of 576.
+
+```bash
+xphd generate 0 archives --nexc 15
+```
+
+`iQ` is a **0-based full-zone index** and the output is named with it plus
+one: `generate 0` writes `GI_ExcPh_Q0001.npz` (Γ). The mesh is derived from the
+lattice, the Dmats band dimension is checked against the BSE window, and the
+electron/hole split `Ge_grid`/`Gh_grid` is **required** — if the contribution
+flags cannot be found the generator aborts rather than writing an archive
+without them (`--allow-no-split` to accept that deliberately). The split is
+accepted when `|Ge + Gh − G|/|G| < 1e-5`: single-precision e-ph elements put a
+correct split near 1e-7, while a wrong flag gives O(1).
+
+**Generate Γ first and validate it before launching the rest:**
+
+```bash
+xphd check-archive archives/GI_ExcPh_Q0001.npz
+```
+
+lists every field each downstream command reads, checks `|G|² = g2`,
+`Ge + Gh = G` and `E_m(q=0) = E_n` with the package's own reader, prints
+`bse_nv`, and ends with `READY` or `NOT READY`. Then the general archive check:
+
+```bash
+xphd check archives/GI_ExcPh_Q0001.npz
+```
+
+```
+  |G|^2 vs g2               0.00e+00   OK
+  Ge + Gh vs G              0.00e+00   OK
+  E_n vs E_m(q=0)      0.0000 meV      OK
+  acoustic |G|^2 at Gamma   0.00e+00   OK
+  |G| median 2.671 meV, max 261.8 meV
+```
+
+All four must pass. `E_n == E_m(q=0)` is the sharpest: those are the same
+states at the same momentum, so any disagreement means the rotation or index
+mapping is wrong and every energy denominator downstream is wrong with it. A
+`|G|` median of 1–50 meV is physical; judge on the **median** — a single large
+outlier is usually the LO branch near Γ, which is real.
+
+Then the rest. `scripts/run_generate.sh` (SLURM) and `scripts/run_generate.ps1`
+(Windows, PowerShell 7) run several Q at once and skip any archive already
+complete, so a time limit costs nothing. The concurrency is bounded by
+**memory**, not cores: each process loads the full e-ph database.
+
+**61 or 576?** The linewidth sweep, the unfold, the temperature series and the
+selection-rule test all run from the 61 irreducible archives. Only the
+real-time transport needs every Q in the zone — a missing Q enters with zero
+energy and becomes a sink that silently absorbs population. Generate 61 first;
+the other 515 only when you reach the transport, and then confirm:
+
+```bash
+xphd verify-archives --dir archives --n 576
+```
+
+which exits non-zero and prints the 0-based indices to regenerate if anything
+is missing, incomplete, of the wrong shape, or duplicated.
+
+The phonon branch characters that the selection-rule test reads:
+
+```bash
+xphd mode-labels --modes matdyn.modes --fine 360 --mesh 24 \
+                 --masses 10.81 14.007 --archive archives/GI_ExcPh_Q0001.npz \
+                 --hw-fine hw_fine.npy -o mode_labels.npy
+```
+
+picks the fine-mesh points on the source mesh, classifies each branch as
+ZA TA LA ZO TO LO, and matches them to the archive's `q_red` as a checked
+bijection, so a different q-ordering between matdyn and the archives cannot
+scramble them. The degenerate acoustic triplet at Γ is written as −1. Only the
+mirror parity of these labels is used downstream — ZA and ZO odd, the rest
+even — and that part is exact in a planar layer.
+
+### 3. Linewidths
+
+At one Q:
+
+```bash
+xphd linewidth archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy \
+               --T 10 77 150 300 --acoustic-cut 5e-4 -o lw_gamma.npz
+```
+
+No `--refine` needed: the size of `hw_fine` fixes it (360/N). `--flat-width`
+defaults to `2.4e-3 / N_fine`, the same for every source mesh. Other options:
+`--scheme const|fft` (how the coupling is carried onto the fine mesh),
+`--acoustic-model none|q2|auto`, `--n-shell`, `--band-interp local|fourier`.
+
+**Exciton energies are refined locally.** On the fine mesh, each exciton
+energy comes from a quadratic around its nearest mesh point, fixed by that
+point's six neighbours (`--band-interp local`, the default). The earlier
+global Fourier interpolant rings from every crossing of the energy-ordered
+bands, across the whole zone: at GaN's K minimum it made the band 34% too
+steep, with a spurious two-fold anisotropy, and on a test valley a crossing
+150 meV above the minimum moved the minimum's width by 35%. The local model
+keeps that width within 2% of its exact value. **Results therefore differ
+from earlier versions**; `--band-interp fourier` reproduces them. The same
+option is on `interference`, `sweep`, `selfenergy` and `lineshape`, and
+`sweep` must be given the same one as the single-Q runs.
+
+```
+T =   10.0 K   [FWHM, meV]
+   manifold |    total |  emission | absorption |    tau (ps)
+        {1} |   24.122 |    24.122 |      0.000 |      0.0273
+```
+
+**At a band minimum, use `--acoustic-model q2`.** Nothing lies below a
+minimum, so its only channel is absorbing a small-q acoustic phonon, at the
+wavevector where the phonon energy meets the exciton dispersion,
+`q* = hbar c / b` with `E = E_min + b q^2`. That is typically a few hundredths
+of an inverse ångström — inside the cell around q = 0, where the
+constant-coupling scheme can only use the q = 0 value, which the acoustic sum
+rule sets to zero. The default, `none`, therefore drops the channel entirely;
+on planar GaN's K minimum it gave 0.04 meV at 77 K where `q2` gives 7.9.
+
+`q2` fits `|G|^2 * 2w = C q^2` to the innermost `--n-shell` shells. It is the
+right form for an exciton: a long-range piezoelectric field couples to charge,
+and electron and hole cancel as q → 0, like the Fröhlich term. `auto` also
+keeps a constant where it passes a 2-sigma test — right for free carriers, but
+for an exciton a kept constant is the fit absorbing the bend of the exciton
+form factor, and being log-divergent it inflated the same GaN number to
+134 meV. It is flagged when it happens.
+
+The fit prints C shell by shell. If it falls from the inner to the outer
+shells, the form factor is already bending the data there, the extrapolation
+toward q = 0 is least reliable exactly where it matters, and the result is
+likely a lower bound. Scan `--n-shell 1 2 3 4` and report the spread; quote `--n-shell 1`, the
+estimate closest to q → 0. On planar GaN's K minimum the scan gave 9.1, 8.3,
+7.9 and 7.4 meV at 77 K; on hBN's Γ minimum 0.88–0.92 meV, most of which comes
+from computed mesh points outside the Γ cell. The
+check that does not depend on any of this is the deformation potential from
+strained ground-state calculations, which gives the q → 0 coupling directly.
+
+```bash
+xphd linewidth <K archive> --hw-fine hw_fine.npy --T 77 150 300 \
+               --acoustic-cut 5e-4 --acoustic-model q2 --n-shell 1 -o K_q2_ns1.txt
+```
+
+**By phonon branch.** Every run computes each branch's emission and
+absorption. `--per-mode` prints them as a table per manifold, with the
+emission share of each branch, and checks that the branches sum to the
+total; with a text `-o` it also writes `<stem>_modes.txt`, one row per
+(T, state, branch). The main table is unchanged, so scripts that read it by
+column position still work. In an `.npz` the same data is always present as
+`mode_em` and `mode_ab`, shaped (T, state, branch). Branch indices are
+energy-ordered at each q, so an index can change character where branches
+cross; near Γ, 1–3 are acoustic.
+
+```bash
+xphd linewidth GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --T 77 300 \
+               --acoustic-cut 5e-4 --per-mode -o Gamma.txt
+#   -> Gamma.txt (per state) and Gamma_modes.txt (per branch)
+```
+
+**Checkpoint.** Absorption must be negligible at 10 K — for an 8.6 meV mode the
+Bose factor is 5e-5. Finite absorption at low temperature means a finite
+coupling has been paired with a vanishing `omega` somewhere.
+
+The whole zone:
+
+```bash
+xphd sweep 'archives/GI_ExcPh_Q*.npz' --hw-fine hw_fine.npy --T 77 \
+           --acoustic-cut 5e-4 --acoustic-model q2 --n-shell 1 \
+           --workers 8 --unfold ../phonons/SAVE -o lw_77K.npz
+```
+
+This is the field the fat-band plots and the BTE reference consume. **Give it
+the same `--acoustic-model` and `--n-shell` as the single-Q runs**: otherwise a
+minimum reads one way in the temperature plot and another in the zone maps. The
+chosen model is recorded in the saved field. `linewidth` warns when a state
+emits nothing — a band minimum — under `--acoustic-model none`, and `sweep`
+notes the same when run that way. Q is read
+from each **file**, never from the job index, so a reordering worker pool
+cannot mislabel results. `--unfold` copies each irreducible representative
+onto its full star. `E(q)` and `omega(q)` are already symmetric on the source
+mesh, and `|G|²` must *not* be point-group averaged — it depends on two momenta
+and only the full sum over modes and states is invariant. What is invariant is
+the resulting `Gamma(Q)`, so symmetry is restored where it is well defined: on
+the final field. To symmetrise a field computed earlier:
+
+```bash
+xphd unfold lw_77K.npz --savepath ../phonons/SAVE -o lw_77K_sym.npz
+```
+
+**Check the output shape.** `Q_red` must be `(576, 3)`; `(61, 3)` means the
+unfold did not run, and every heat map downstream would extrapolate across
+five-sixths of the zone.
+
+### 4. Symmetry
+
+All four read the BSE databases directly and find each one through the
+**irreducible parent** of its point, from `lat.kpoints_indexes`.
+`ndb.BS_diago_Q{n}` is numbered over the irreducible wedge, while archives are
+numbered over the full zone; pairing the two numbers opens the wrong database
+for every point but Γ.
+
+**The mirror parity of every exciton across the zone:**
+
+```bash
+xphd parity --save ../phonons/SAVE --bse-dir ../BSE/output_all \
+            --dmats Dmats.npy --nv 3 --nstates 15 -o parity.npz
+```
+
+In a planar layer σ_h acts trivially on in-plane k, so its D-matrix is
+diagonal with entries `p_n(k) = ±1`, and
+
+```
+chi_S(Q) = sum_kvc |A^S_kvc|^2 p_c(k+Q) p_v(k)
+```
+
+Only the 61 wedge databases are evaluated; σ_h commutes with every operation of
+D3h and with time reversal, so the parity is constant across each star and
+unfolds to the full zone exactly. `--nstates` limits the states read — the map
+needs only the lowest few, and reading all of a full diagonalisation is slow.
+The printout gives the fraction within 0.2 of ±1 and the fraction even, odd and
+undetermined for the lowest state; plot it with `scripts/plot_parity_bz.py`
+(set `PARITY` in its SETTINGS block).
+
+**Irrep labels at the high-symmetry points:**
+
+```bash
+xphd irreps --nv 3 --points G K M --nstates 15 --deg-tol 5e-3
+```
+
+The little group is computed as the set of operations that send Q to itself
+modulo a reciprocal vector — not selected by class name — and printed with its
+order: Γ 12 (D3h), K 6 (C3h), M 4 (C2v). **If K ever reports order 12 the
+operations or the structure are wrong**: that happens only if the mirrors run
+along Γ–K, which would swap the two sublattices.
+
+At K the group C3h is Abelian and every irrep is one-dimensional. Nothing
+pairs `E'_1` with `E'_2` there: σ_v combined with time reversal fixes K, but
+it maps each C3 eigenvalue to itself and squares to +1, so it adds no
+degeneracy — as for the K-valley states of hBN or the TMDs. A near-degenerate
+pair grouped by `--deg-tol` is reported as `E'_1+E'_2` or `E''_1+E''_2`; that
+degeneracy is approximate, such as a 2p± envelope pair split only by trigonal
+warping.
+
+**The C3 label at K depends on the rotation axis.** A Bloch sum at K picks up
+a phase from sites off the C3 axis, so rotating about a different centre —
+Ga, N or the hexagon centre — multiplies every K state's C3 eigenvalue by ω or
+ω² and can turn an A into an E₁ or E₂. The labels are relative to the origin
+in your SAVE, which is worth stating in a paper. The σ_h parity is absolute,
+and selection rules are unaffected as long as every label comes from the
+same rotation matrices. One representative per class is used, since in C3h `C3` and
+`C3²` carry conjugate characters and averaging them destroys the phase. The
+representation's unitarity on the lowest manifold is printed before anything
+is labelled; a large value means the labels below it are unsafe. The `chi(sh)`
+column should reproduce `parity.npz` at each point.
+
+**The selection rule, tested directly:**
+
+```bash
+xphd selection-rule --archive archives/GI_ExcPh_Q0001.npz --parity parity.npz \
+                    --labels mode_labels.npy --state 1 --tol 0.5 \
+                    --by-final --nfinal 4 --modes-for 1 --out selection_rule.pdf
+```
+
+Splits the coupling of the initial state into symmetry-allowed
+(`p_nu p_beta = p_lambda`) and symmetry-forbidden, and reports their ratio;
+planar GaN gives forbidden/allowed = 0.017. Points with `|chi| < --tol` are
+counted as undetermined rather than forced to a parity. `--by-final` maps the
+coupling into each final state; `--modes-for` adds one panel per branch for
+that channel.
+
+**The bands behind the exciton parity:**
+
+```bash
+xphd band-parity --save ../phonons/SAVE --bse-dir ../BSE/output_all \
+                 --dmats Dmats.npy --nv 3 --path G M K G -o band_parity.npz
+```
+
+Then `scripts/plot_band_parity.py` with `NPZ = "band_parity.npz"` for the
+dispersion, and `scripts/plot_parity_bz.py` with
+`PARITY = "band_parity.npz"`, `ONLY = "exciton"`, `BAND = 2`,
+`TITLE = "band 4"` for one band's zone map.
+
+In a planar layer σ_h leaves every in-plane k fixed, so its representation
+at k is diagonal in the band index, with `p_n(k) = +1` for bands built from
+s, pₓ, p_y and `−1` for p_z. These are exactly the factors in
+`chi_S = sum |A|^2 p_c(k+Q) p_v(k)`, so this shows *why* the exciton map
+looks as it does: a sign change of chi across the zone marks where a band of
+the other parity enters the exciton's support.
+
+The parities come from the σ_h block of `Dmats.npy`, so they cover the BSE
+window — the only bands the exciton parity involves. The command first checks
+that σ_h really leaves every k fixed. Where two degenerate bands of opposite
+parity come back in a mixed basis, the diagonal is no longer ±1 and the rest
+of the row is not small; those points are reported as undetermined. A colour
+change along the path is a crossing between bands of opposite parity: the
+energy-ordered index changes character there, not any single state.
+
+The table printed gives each band's parity at the path's high-symmetry
+points, how often it flips along the path, and the fraction of the zone it is
+even. Row `j` of that table is `--band j` for the zone map. The path runs
+through the mesh points lying exactly on it — 25 on Γ–M–K–Γ of a 24×24 mesh —
+which is the honest resolution of these parities; the energies are Kohn–Sham.
+The output also carries the keys `Q_red` and `chi`, which is what lets
+`plot_parity_bz.py` draw a band's map unchanged.
+
+**Why a character is fractional:**
+
+```bash
+xphd decompose-parity --nv 3 --parity parity.npz --iq 37 --state 1
+```
+
+A non-degenerate eigenstate of a Hamiltonian commuting with σ_h must give ±1.
+A fractional value means the sum runs over band pairs of both signs: this
+reports the even/odd weight split, the heaviest k-points, and which (v, c) pair
+carries each sign. Without `--iq` it takes the first point with a fractional
+character. A single pair whose sign varies with k means one band changes
+parity across the exciton's support — report the value as undefined, not as an
+intermediate parity.
+
+### 5. Optics
+
+**Exciton dipoles for emission:**
+
+```bash
+xphd dipoles --save ../phonons/SAVE --bse-dir ../BSE/output_all -o exc_dipoles.npy
+```
+
+yambopy's `YamboDipolesDB` can flag a closed-shell system as open-shell and
+return a conduction axis that starts at band 0 instead of at the gap. The true
+conduction bands are the last `nc` entries of that axis and are selected here;
+the orientation, valence axis and conjugation are yambopy's own. The result is
+validated against **yambo's own residuals**, compared per degenerate manifold
+and in-plane only, since within a degenerate manifold the solver's basis is
+arbitrary. Two numbers to read: the manifold ranking agreement, and the spread
+of in-plane strength inside each degenerate manifold, which symmetry requires
+to be zero. `--compare` checks against a reference `exc_dipoles.npy`.
+
+`exc_ph_get_inputs` in yambopy loads an existing `exc_dipoles.npy` instead of
+recomputing it when `overwrite=False`, which is how this file feeds the
+phonon-assisted luminescence.
+
+**Chirality of a degenerate pair:**
+
+```bash
+xphd chirality --dipoles exc_dipoles.npy --states 39 40 --out chirality.npz
+```
+
+From a single BSE run: rotates the pair into the eigenbasis of `L_z` within the
+subspace and reports the helicity of each state and its valley polarisation
+`P = (W_K − W_K')/(W_K + W_K')`. The rotation makes the two helicities equal
+and opposite but does **not** force them to ±1 — a random pair gives about
+0.7 — so a magnitude near 1 is a measurement.
+
+**Bright and dark partners:**
+
+```bash
+xphd coherence --save ../phonons/SAVE --bse ../BSE/output_all \
+               --dipoles ../BSE/output_all/ndb.dipoles --pair 1 3
+```
+
+k-space overlap and the interference figure of merit: whether a dark state is
+dark by symmetry or by internal phase cancellation within a shared transition
+manifold. Without `--dipoles` only the k-space diagnostics are computed, which
+already settle whether a bright/dark pair shares a manifold.
+
+**Absorption with exciton-phonon broadening, and the self-energy:**
+
+```bash
+xphd lineshape  archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --T 77 \
+                --bsdb ../BSE/output_all/ndb.BS_diago_Q1 --eta 1e-3 -o eps2.npz
+xphd selfenergy archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy \
+                --state 1 --T 77 --n-omega 2000 -o sigma.npz
+```
+
+`selfenergy` computes Im Σ(ω) and its Kramers–Kronig partner. `--window 0`
+(the default) spans the full support of Im Σ, which the transform needs:
+Im Σ is one-sided for states near the bottom of the manifold, so a symmetric
+window cuts through its maximum.
+
+### 6. Dynamics
+
+**Real-time Boltzmann transport:**
+
+```bash
+xphd bte 'archives/GI_ExcPh_Q*.npz' --T 77 --refine 5 --hw-fine hw_fine.npy \
+         --inject optical --pump-center 5.475 --pump-sigma 0.018 \
+         --t-end 10000 --nt 200 --workers 14 --channels --snapshots snaps.npz
+```
+
+Needs all 576 archives (`xphd verify-archives` first). `--inject optical`
+fills only the light cone, weighted by `|d|²` times the pump lineshape;
+`thermal` and `uniform` are phenomenological alternatives. `--channels` records
+the flux by branch and by emission/absorption; `--snapshots` writes the
+populations for plotting. Read particle-number conservation and the equilibrium
+mean energy in the printout before plotting anything. See
+[Real-time BTE](#real-time-bte) for the Python interface.
+
+**Are the out-rates the linewidths?**
+
+```bash
+xphd bte-check --archives 'archives/GI_ExcPh_Q*.npz' --field lw_77K_sym.npz \
+               --hw-fine hw_fine.npy --T 77 --refine 5 10 15
+```
+
+The out-rate `sum_j P_ij` must equal `Gamma_i / hbar` under matched conditions.
+The last row — refined, with the same matdyn phonons the sweep used — is the
+like-for-like comparison, and should read a ratio near 1. The temperature must
+be one the field contains; it is looked up, not assumed to be the first.
+
+**Exciton photoemission:**
+
+```bash
+xphd arpes --temperature 300 --sigma 0.05 -o arpes_300K.npz
+xphd arpes --snapshots snaps.npz --time 30 -o arpes_30fs.npz
+```
+
+`I(k,E) = sum N_SQ |A^SQ_vck|^2 delta(E − E_SQ − eps_v,k−Q)`: photoemitting
+the electron leaves the hole behind, so the feature sits at the exciton energy
+**plus** the valence energy at the hole's momentum, and at the momentum of the
+electron. `E` is the band-structure energy axis on the reference of the
+valence energies, where an ordinary valence state would appear at `eps_v`.
+
+Two checks follow, and the tests enforce both: at the valence maximum the
+signal sits at `eps_c − E_b`, below the conduction band by the binding energy;
+and at low temperature it is a **replica** of the valence band — the same
+dispersion, shifted up by `E_S` — not its mirror image.
+
+`--temperature` gives quasi-equilibrium Boltzmann occupations; `--snapshots`
+with `--time` takes them from a transport run, which is what makes it time
+resolved. The valence energies come from `ns.db1` — absolute Kohn-Sham values —
+so the automatic window is on that reference; `--emin`/`--emax` are too.
+`--valence-shift` adds a rigid correction and `--valence-npy` supplies
+full-zone quasiparticle energies instead. The photoemission matrix element is
+constant (the sudden approximation), so relative intensities across k, E and t
+are meaningful and absolute ones are not.
+
+**Relation to yambo.** yambo offers two routes. The first reconstructs the
+lesser Green's function from a real-time propagation (`yambo_rt` with
+`SaveGhistory`, then `ypp_rt`), which includes the pump explicitly and the
+coherent electron-hole polarisation; `xphd arpes` does not — it describes the
+incoherent regime, once the polarisation has dephased into populations. The
+second, `RTARPES` in `ypp_rt` on BSE solutions at every Q (lumen fork, not yet
+in the GPL release), is the same population-weighted construction as this one,
+with Boltzmann occupations from `EXCTemp`. What `xphd arpes` adds is
+occupations evolved by exciton-phonon scattering (`--snapshots`); what yambo
+adds is BoltzTraP interpolation onto a band path, where this works on the BSE
+mesh. Run on the same databases the two should agree, which is the natural
+cross-check.
+
+Plot with `scripts/plot_arpes.py`.
+
+### 7. Diagnostics
+
+Used as needed rather than in sequence. The first four are described in
+[Reading the diagnostics](#reading-the-diagnostics).
+
+```bash
+xphd channels     archives/GI_ExcPh_Q0001.npz --state 1 --T 77 --acoustic-cut 5e-4 --top 10
+xphd frohlich     archives/GI_ExcPh_Q0001.npz --nshell 3
+xphd localization archives/GI_ExcPh_Q0001.npz --hex 2.50
+xphd gauge        archives/GI_ExcPh_Q0001.npz --hex 2.50
+```
+
+**Symmetry-dark versus interference-dark:**
+
+```bash
+xphd interference archives/GI_ExcPh_Q0001.npz --hw-fine hw_fine.npy --T 77 \
+                  --acoustic-cut 5e-4 --n-acoustic 3
+```
+
+**Band mirror parity and the acoustic-sum-rule residue:**
+
+```bash
+xphd check-parity-asr --save ../phonons/SAVE --dmats Dmats.npy \
+                      --archive archives/GI_ExcPh_Q0001.npz \
+                      --labels mode_labels.npy --hw-fine hw_fine.npy \
+                      --nv 3 --T 77 --state 1
+```
+
+Whether the bands in the BSE window keep one mirror parity across k — if not,
+the flexural selection rule familiar from graphene does not carry over — and
+whether the acoustic linewidth sits on the ASR residue at Γ.
+
+**After recomputing with a planar structure:**
+
+```bash
+xphd validate-planar --savepath ../phonons/SAVE --mesh 24 \
+                     --masses 10.81 14.007 --archives 'archives/GI_ExcPh_Q*.npz'
+xphd validate-planar ... --only 1 2 3        # run a subset of the seven checks
+xphd validate-planar ... --skip 6 7
+```
+
+Seven checks: structure, symmetry, archive, parity, selection rule, ZA
+dispersion, acoustic cut.
+
+**Effective masses and a screening descriptor:**
+
+```bash
+xphd effective-mass bands.gnu --band 4 --center 0.333
+xphd mott-wannier                                   # self-test
+xphd mott-wannier --name hBN --Eg-dir 7.3 --Eg-ind 7.1 \
+                  --mu-dir 0.40 --mu-ind 0.50 --alpha 3.5 --dE-bse -0.15
+xphd mott-wannier ... --eps 3.0 --L 20              # alpha from a slab epsilon
+```
+
+`effective-mass` fits a parabola to a band edge in a gnuplot band file.
+`mott-wannier` asks whether a 2D Keldysh model with the gap difference and the
+two reduced masses predicts the bright-dark splitting; with no arguments it
+runs its self-test. `|error| < 50 meV` across materials would mean the
+splitting can be had without the BSE.
+
+---
+
+## Command reference — all 36
+
+`y` in the last column: needs yambopy to run (every command's `--help` works
+without it).
+
+| command | purpose | yambopy |
+|---|---|---|
+| **phonons** | | |
+| `matdyn-split` | split a q-list into chunks for serial `matdyn.x` | |
+| `matdyn-merge` | merge chunked `.modes`, `.freq` and `.gp` | |
+| `modes-check` | verify a merged `matdyn.modes`; planarity of every mode | |
+| `matdyn` | refined frequencies onto the archive mesh → `hw_fine.npy` | |
+| `mode-labels` | branch characters on the archive mesh → `mode_labels.npy` | |
+| **archives** | | |
+| `dmats` | rotation matrices `Dmats.npy`; band window from the BSE | y |
+| `ibz` | which Q to generate, as 0-based `generate` arguments | y |
+| `generate` | one exciton-phonon archive for a given Q | y |
+| `check-archive` | validate one archive before generating the rest | |
+| `check` | the four archive consistency checks | |
+| `verify-archives` | confirm the full set is complete | |
+| **linewidths** | | |
+| `linewidth` | broadening-free linewidths at one Q | |
+| `sweep` | linewidths over every Q → the Γ(Q) field | |
+| `unfold` | symmetrise a field, or expand an IBZ set to the zone | |
+| **symmetry** | | |
+| `parity` | σ_h parity of every exciton across the zone | y |
+| `irreps` | irrep labels at the high-symmetry points | y |
+| `selection-rule` | coupling split into symmetry-allowed and -forbidden | |
+| `decompose-parity` | why an exciton has a fractional σ_h character | y |
+| `band-parity` | σ_h parity of the electronic bands, along a path and over the zone | y |
+| **optics** | | |
+| `dipoles` | exciton dipoles for emission, validated against yambo | y |
+| `chirality` | helicity and valley polarisation of a degenerate pair | y |
+| `coherence` | k-space overlap and interference figure of merit | y |
+| `lineshape` | ε₂(ω) with exciton-phonon broadening | |
+| `selfenergy` | Im Σ(ω) and its Kramers–Kronig partner | |
+| **dynamics** | | |
+| `bte` | real-time Boltzmann transport | |
+| `bte-check` | do transport out-rates equal the linewidths? | |
+| `arpes` | exciton photoemission I(k,E), thermal or time-resolved | y |
+| **diagnostics** | | |
+| `channels` | where a linewidth comes from: DOS × \|G\|² per channel | |
+| `frohlich` | electron/hole cancellation | |
+| `localization` | can the complex amplitude be interpolated? | |
+| `gauge` | attribute a non-smooth amplitude to a gauge | |
+| `interference` | dark by symmetry, or by internal phase cancellation | |
+| `check-parity-asr` | band mirror parity; the acoustic-sum-rule residue | y |
+| `validate-planar` | seven checks after recomputing with a planar structure | y |
+| `effective-mass` | effective masses from a parabolic fit to a band edge | |
+| `mott-wannier` | 2D Mott-Wannier estimate of the bright-dark splitting | |
+
+Full argument lists — generated from the installed package:
+
+```text
+xphd matdyn-split     [--n N] [--chunks CHUNKS] [--prefix PREFIX]
+xphd matdyn-merge     [--chunks CHUNKS] [--modes-prefix P] [--freq-prefix P]
+                      [-o OUT_MODES] [--freq FREQ] [--index INDEX]
+xphd modes-check      [--modes MODES] [--freq FREQ] [--n N]
+xphd matdyn           freq [--fine FINE] [--nbnd NBND] [--npz NPZ]
+                      [--mesh N N] [--q-order rowmajor|npz] [-o OUT]
+xphd mode-labels      --masses M [M ...] [--modes MODES] [--fine FINE]
+                      [--mesh MESH] [--archive ARCHIVE] [--hw-fine F] [-o OUT]
+
+xphd dmats            [--bse-dir D] [--savepath S] [--ndb-elph F] [--nexc N]
+                      [--tag TAG]
+xphd ibz              [--savepath S] [--mesh N N] [--iq-map ARCHIVE]
+xphd generate         iQ [outdir] [--nexc N] [--mesh N N] [--savepath S]
+                      [--ndb-elph F] [--bse-dir D] [--dmats F] [--threads N]
+                      [--verify-threads] [--allow-no-split]
+xphd check-archive    archive
+xphd check            npz [--mesh N N]
+xphd verify-archives  [--dir DIR] [--n N]
+
+xphd linewidth        npz [--mesh N N] [--hw-fine F] [--fine N] [--refine R]
+                      [--scheme const|fft] [--T T ...] [--flat-width X]
+                      [--acoustic-cut X] [--acoustic-model none|q2|auto]
+                      [--n-shell N] [-o OUT] [--per-mode]
+xphd sweep            pattern [--mesh N N] [--hw-fine F] [--fine N]
+                      [--refine R] [--scheme const|fft] [--T T ...]
+                      [--flat-width X] [--acoustic-cut X] [--workers N]
+                      [--unfold SAVE] [--legacy]
+                      [--acoustic-model none|q2|auto] [--n-shell N] [-o OUT]
+xphd unfold           field [--savepath S] [--mesh N N] [--legacy] [-o OUT]
+
+xphd parity           --nv NV [--save S] [--bse-dir D] [--dmats F]
+                      [--nstates N] [-o OUT]
+xphd irreps           --nv NV [--save S] [--bse-dir D] [--dmats F]
+                      [--points P ...] [--nstates N] [--deg-tol X]
+xphd selection-rule   [--archive A] [--parity P] [--labels L] [--state N]
+                      [--tol X] [--by-final] [--nfinal N] [--modes-for N]
+                      [--clip X] [--dpi N] [--out OUT]
+xphd decompose-parity --nv NV [--save S] [--bse-dir D] [--dmats F]
+                      [--parity P] [--iq N] [--state N]
+xphd band-parity      --nv NV [--save S] [--bse-dir D] [--dmats F]
+                      [--path P ...] [--tol X] [-o OUT]
+
+xphd dipoles          [--save S] [--bse-dir D] [--dipoles-dir D] [-o OUT]
+                      [--window X] [--deg-tol X] [--compare F]
+xphd chirality        --states A B [--save S] [--bse-dir D] [--dipoles F]
+                      [--out OUT]
+xphd coherence        [--save S] [--bse D] [--dipoles F] [--pair A B]
+                      [--nstates N]
+xphd lineshape        npz [--mesh N N] [--T T] [--hw-fine F] [--refine R]
+                      [--n-omega N] [--pad X] [--acoustic-cut X] [--bsdb F]
+                      [--eta X] [-o OUT]
+xphd selfenergy       npz [--mesh N N] [--state N] [--T T] [--hw-fine F]
+                      [--refine R] [--window X] [--n-omega N]
+                      [--acoustic-cut X] [-o OUT]
+
+xphd bte              pattern [--mesh N N] [--T T] [--acoustic-cut X]
+                      [--flat-width X] [--refine R] [--hw-fine F]
+                      [--scheme const|complexfft]
+                      [--inject optical|thermal|uniform] [--state N ...]
+                      [--pump-center E] [--pump-sigma X] [--hot X] [--width X]
+                      [--density X] [--t-end T] [--nt N] [--workers N]
+                      [--channels] [--snapshots F]
+xphd bte-check        --archives GLOB [--field F] [--hw-fine F] [--T T]
+                      [--refine R ...] [--workers N]
+xphd arpes            (--temperature T | --snapshots F) [--time T] [--save S]
+                      [--bse-dir D] [--nstates N] [--emin E] [--emax E]
+                      [--ne N] [--sigma X] [--valence-shift X]
+                      [--valence-npy F] [--path P ...] [-o OUT]
+
+xphd channels         npz [--mesh N N] [--state N] [--T T]
+                      [--acoustic-cut X] [--top N]
+xphd frohlich         npz [--mesh N N] [--nshell N]
+xphd localization     npz [--mesh N N] [--hex A]
+xphd gauge            npz [--mesh N N] [--hex A]
+xphd interference     npz [--mesh N N] [--hw-fine F] [--fine N] [--refine R]
+                      [--T T] [--acoustic-cut X] [--n-acoustic N]
+xphd check-parity-asr [--save S] [--dmats F] [--archive A] [--labels L]
+                      [--hw-fine F] [--nv NV] [--T T] [--state N]
+xphd validate-planar  --masses M1 M2 [--savepath S] [--mesh N]
+                      [--archives GLOB] [--only N ...] [--skip N ...]
+xphd effective-mass   [gnu] [--band N] [--center X]
+xphd mott-wannier     [--name S] [--Eg-dir E] [--Eg-ind E] [--mu-dir M]
+                      [--mu-ind M] [--alpha A | --eps E] [--L L] [--dE-bse E]
+```
+
+Energies are eV throughout, `--T` is kelvin, `--hex` and `--alat` are in-plane
+lattice constants in ångström.
+
+---
+
+## Figure scripts
+
+**Quick finder.** Phonon dispersion coloured by sigma_h parity:
+`plot_phonon_parity.py` (set `PERM` for non-planar layers). Electronic bands by
+parity: `plot_band_parity.py`. Exciton bands by parity:
+`plot_parity_dispersion.py`. Parity maps over the zone: `plot_parity_bz.py`.
+Coupling maps with the parity overlay: `plot_coupling_maps.py`. Your own figure
+scripts (Fig. 2, the transport figures, heatmaps) are in `scripts/user/`.
+
+In `scripts/`. **None takes a command line.** Each opens with a numbered
+`SETTINGS` block — file names, which state or band, units, limits, colours —
+followed by the sections that load, compute and plot. Edit the block and run
+the file; in VS Code, *Run Python File*. The figure is saved to `OUT` and,
+with `SHOW = True`, opened in a window. Where a script's own description
+mentions a `--flag`, the setting is the same name in capitals: `--first-band`
+is `FIRST_BAND`. A setting that has no safe default — the lattice constant,
+say — is `None`, and the script stops with a message naming it until you set
+it.
+
+| script | makes | set at least | notes |
+|---|---|---|---|
+| `plot_phonon_parity.py` | phonon dispersion, each branch coloured by σ_h parity | `MODES`, `TICK_LABELS` | takes the path straight from your full-mesh `matdyn.modes`; prints frequencies and parity at each high-symmetry point |
+| `plot_parity_dispersion.py` | yambo's interpolated exciton or electron bands, coloured by parity | `INTERP`, `PARITY`, `FIRST_BAND` for electrons | checks energies where the path meets the mesh; `MESH_POINTS = True` marks computed values |
+| `plot_band_parity.py` | electronic bands on the mesh path, coloured by parity | `NPZ` | even red, odd blue, as everywhere |
+| `plot_parity_bz.py` | parity map of the excitons or of one band; σ_h-odd phonon count | `PARITY`, `MODES` | nearest-neighbour by default: parity is a step; `TITLE` relabels |
+| `plot_linewidth_bz.py` | exciton linewidth over the zone | `FIELD`, `STATE` | reads the unfolded sweep field; FWHM and temperature come from the file |
+| `check_minimum_linewidth.py` | not a plot: checks the linewidth at an exciton minimum against its closed form | `ARCHIVE`, `HW_FINE`, `ALAT` | prints the band curvature, sound velocities, couplings, implied deformation potential and the closed-form width; runs xphd's own for comparison |
+| `helicity_pl.py` | phonon-assisted PL resolved by circular polarisation and by valley | `ARCHIVE` (the Γ archive), `DIPOLES` (from `xphd dipoles`) | coherent sum over the Q = 0 states with complex x and y dipoles from ONE BSE; prints P for the K and K′ valleys, the branches carrying each helicity, and the sum-rule check |
+| `crossing_radii.py` | the two radii bounding the fourth branch's ring: the exciton parity contour and the ZO crossing q_x | `PARITY` (parity.npz), `MODES` (360x360 matdyn.modes) | contour from the crossing of the lowest even and odd bands, interpolated between BSE points; q_x where branch 4's w_z drops through 1/2 on the fine mesh |
+| `soc_probe.py` | read-only diagnostic of a spin-orbit calculation (WSe2) for the parity generalisation | `SAVE`, `BSE_DIR`, `DMATS`, `ELPH`, `ARCHIVE` | spinor components, sigma_h atom permutation, D(sigma_h)^2 = -1 check, Q = 0 exciton parities, phonon parities by the permutation formula; each section reports its own failure |
+| `labels_from_elph.py` | phonon parities in the el-ph database's own mode order, for `selection_rule_test.py` | `ELPH`, `ARCHIVE`, `SAVE` (or `PERM`) | parity from the sigma_h atom permutation: identical to the out-of-plane weight for planar layers, correct for WSe2-type layers |
+| `cb_splitting.py` | conduction-band spin splitting at K before and after GW, and which band shares the valence spin | `QP_FILE` (o-*.qp), `BAND_PARITY` (optional), `VBM_BAND`, `WINDOW` | flags bands without corrections and a GW-reversed order (dark exciton pushed above the bright one) |
+| `exc_transitions.py` | which band transitions and valleys build each of the lowest excitons | `SAVE`, `BSE_DB`, `NSTATES` | weight of each (v, c) pair and the share near K, K' and Gamma; checks the dark/bright ordering against the transitions |
+| `plot_coupling_maps.py` | coupling maps |G|^2, one panel per phonon branch (a grid: 2x3 for six, 3x3 for nine), with the sigma_h parity overlay | `ARCHIVE`, `PARITY` (from `xphd parity --nstates` >= the archive's states), `LABELS` (from `labels_from_elph.py`), `STATE`, `FINAL`, `OVERLAY` | `contour`: where the lowest even and odd exciton bands cross; `forbidden`: hatching where that branch is symmetry-forbidden, with the forbidden share of each map printed (zero to numerical precision when the rule holds) |
+| `check_bte.py` | BTE end state against Boltzmann at the run's temperature; valley fraction at a chosen time | `BTE` (snapshots from `xphd bte --snapshots`), `T_BTE`, `T_CHECK`, `RADIUS` | the detailed-balance check of the transport |
+| `valley_times.py` | when the population of each valley (CENTERS: K, K' by default; add Gamma for WSe2) crosses 50, 90 and 99% | a snapshots file | the funnelling times quoted in the paper |
+| `where_forbidden.py` | what carries any forbidden coupling: phonon swaps, mixed states, or a small opposite-parity admixture eps = (1-|chi|)/2 | `ARCHIVE`, `PARITY`, `LABELS`, `STATE`, `TOL` | per final state, r = forbidden/allowed against eps: strong correlation with r/eps of order 1 means admixture leakage |
+| `add_osc.py` | add the Q = 0 oscillator strengths (`osc_Q0`) that `xphd bte --inject optical` needs to the Gamma archive, from `xphd dipoles` | `ARCHIVE`, `DIPOLES`, `POLARISATION` | `xphd generate` does not store them; in-plane |d_x|^2+|d_y|^2 for normal incidence |
+| `manifold_closure.py` | are the near-degenerate manifolds whole inside the archive's states, or does the state cut split them? | `PARITY` (written with more states than the archive), `NARCHIVE` | eigen-parities of cut against complete manifolds; a verdict on --nexc or --manifold-tol |
+| `window_closure.py` | is the BSE band window closed under sigma_h? Row and column norms of D(sigma_h) band by band | `DMATS`, `SIGMA_H_OP` (from soc_probe.py), `FIRST_BAND`, `NV` | a band whose mirror partner lies outside the window caps every exciton's parity below 1 |
+| `qp_decompose.py` | where a k-dependent GW correction comes from: Z(Sx-Vxc) against Z Sc(Eo), state by state and as differences from a reference point | `QP_FILE` (o-*.qp, 5 columns), `QP_DB` (ndb.QP for Z), `KPOINTS`, `REFERENCE` | an anomaly in Z Sc points at the screening (RIM-W, bands); in Z(Sx-Vxc) at the exchange or Vxc |
+| `phonon_irreps_K.py` | C3 characters and C3h labels (A', A'', E'_1, E'_2, E''_1, E''_2) of the phonon modes at K about a chosen axis, with the sublattice each mode moves; the phonon half of the emission rule | `MODES` (matdyn.modes containing K), `POSITIONS` (from scf.in), `AXIS` ("origin" matches `xphd irreps`) |
+| `slice_archive.py` | copies of an archive keeping the first n exciton states, for the convergence of a width with the number of final states; prints the linewidth commands | `ARCHIVE`, `N_STATES` |
+| `star_uniformity.py` | the star-uniformity check of the SI: T(q) = sum \|G\|^2 over branches and states, T_max/T_min within every star (C3, time reversal, mirror) | `ARCHIVE` (at Gamma), `SYM` |
+| `irreps_check.py` | why `xphd irreps` flags a manifold as non-unitary: per operation, the character, the defect, and how much of each rotated state stays in the group and among all states; plus the orthonormality of the BSE eigenvectors | `POINT`, `STATES`, `NSTATES` |
+| `plot_coupling_parity.py` | coupling split by the phonon's parity, with the parity contour | `NPZ`, `PARITY` | shared colour scale |
+| `bte_figure.py` | the transport figure | `SNAPS`, `DISP`, **`ALAT`** | needs `colormaps` |
+| `bte_animate.py` | the same, animated | `SNAPS`, `DISP`, **`ALAT`** | writes an animation; no window |
+| `plot_arpes.py` | photoemission maps | `NPZ` | output of `xphd arpes` |
+| `fatbands_pl.py` | exciton fat bands with the phonon-assisted PL | the constants at the top | see below |
+| `linewidth_temperature.py` | linewidth against temperature, emission/absorption bars | `FILE` | see below |
+| `q_point_heatmap.py` | coupling heat map at one Q | the paths in the file | needs yambopy and `colormaps` |
+
+**`plot_phonon_parity.py`** takes parity from the out-of-plane weight of each
+eigenvector, `w = sum |e_z|^2 / sum |e|^2`, which is exactly 0 or 1 in a
+planar layer. Set `MODES` and the script works out what the file is:
+
+- **Your full-mesh `matdyn.modes`** — the one behind `hw_fine.npy`. The script
+  takes the mesh points lying exactly on `MESH_PATH` (G, M, K): 361 points for
+  Γ–M–K–Γ on a 360×360 mesh, 1/360 of a reciprocal vector apart, with exact
+  parities and the same frequencies your linewidths used. Nothing else to
+  run; **this is the route to use.** The mesh is recognised from each point's
+  position in the list rather than from its printed q — matdyn prints q to
+  four decimals, too coarse to recover the grid point by point — so a path
+  that happens to have a square number of points is not mistaken for one.
+- **A matdyn run along the path** (`q_in_band_form = .true.`, `flvec`): used
+  as it is. It must share the mesh run's force constants and settings —
+  `loto_2d = .true.` above all. In a planar two-atom cell the two in-plane
+  optical modes meet at Γ; if they don't, the 3D non-analytic form was used,
+  and the script says so.
+- **A full mesh plus `PATH_FREQ`**, a path `.freq` without eigenvectors: each
+  path point takes the parity of its nearest mesh point, and the frequencies
+  are compared where the path meets the mesh. Near a crossing this can give a
+  point the wrong parity; prefer the first route.
+
+With `CONNECT = "parity"` the points are joined within each parity, so each
+line keeps one colour and an even and an odd branch visibly cross, as they
+must; a planar two-atom cell always has two odd branches (ZA, ZO) and four
+even ones. Corners along a path run are found where the path turns most
+sharply, measured over several steps, since single four-decimal steps wobble.
+
+**`check_minimum_linewidth.py`** checks a linewidth at the bottom of an
+exciton band — GaN's K minimum — where only acoustic absorption within the
+valley contributes and every final state lies inside the first mesh cell. For
+a band `E_min + b q²`, a branch `ħcq` and a coupling `|G|²·2ħω = C q²`, the
+width has a closed form, `Γ = (4π²/√3) C N(ħω*)/b²` with `ħω* = (ħc)²/b` and q
+in units of |b|. The script builds `b`, `c` and `C` from your archive and
+`hw_fine.npy` and evaluates it. It compares the curvature of the genuine BSE
+points with that of the band the code integrates (`BAND_INTERP`), and of the
+Fourier band for comparison, and reports the exciton mass, the sound velocities, and the deformation
+potential `C` implies — the quantity a strain calculation checks
+independently. It also says how much of the ring |q| = q* lies inside the Γ
+cell: when the ring crosses the cell edge, `linewidth` switches to the
+nearest mesh point's coupling, held constant, and overshoots (+54% on a test
+valley with 84% of the ring outside; 1–2% agreement with it inside).
+
+**`plot_parity_dispersion.py`** colours yambo's smooth interpolated band
+structure by parity — excitons from `ypp -e i`, electrons from `ypp -s b`
+(with `cooOut = "rlu"` in the ypp input, so the path is in reduced
+coordinates). Parity is computed only on the BSE mesh; between mesh points
+the colour is interpolated, linearly by default, so a short gradient at a
+boundary is interpolation, not a mixed state — `METHOD = "nearest"` shows the
+step and `MESH_POINTS = True` marks the computed values. Where the path meets
+the mesh it compares the interpolated energies with the npz's: directly for
+excitons, and after one common offset for a Kohn–Sham electronic file. A GW
+file moves every band by its own correction — the conduction bands more than
+the valence bands — so no common offset fits; the check then reports the
+per-band offsets and the gap opening, and confirms each band's identity from
+the shape of its dispersion. A wrong `FIRST_BAND` fails either way, and the
+message names which band each column actually resembles. `ENERGIES = "ks"`
+or `"qp"` forces one check. `FIRST_BAND` is the 1-based index of the first
+band in the interpolated file — the start of the band range in the ypp input.
+Exciton states beyond `xphd parity --nstates` are drawn grey.
+
+In G₀W₀ the quasiparticle wavefunctions are the Kohn–Sham ones, so parities
+from the Kohn–Sham rotation matrices are exactly the parities of the GW
+states; and since yambo keeps Kohn–Sham band labels, a band reordered by GW
+still carries its own parity.
+
+**`plot_linewidth_bz.py`** reads the field `xphd sweep ... --unfold` writes,
+so the zone is complete and nothing is unfolded by hand; a field holding only
+the irreducible points is refused with the command that unfolds it. The
+colourbar takes FWHM and the temperature from the file.
+
+**Before running `fatbands_pl.py` on a new material**, set at the top of the
+file: `T_LW`, `T_PL`, `LW_NPZ`, `DISP_FILE`, the four PL/EPS file patterns,
+`OUT` — and **`PL_EMIN` and `PL_EMAX`**, which are GaN's 3.20–4.0 eV. On hBN,
+whose exciton is at 5.475 eV, that window leaves the PL panel empty with no
+error. `PL_SPLIT` and `PL_SCALE` set where and how strongly the PL is drawn.
+
+**`linewidth_temperature.py`** reads `FILE`, and draws `STATES` in the bars,
+`LINES` in the temperature panel and `T_SHOW` as the two histogram
+temperatures; `TOP_BREAK`/`BAR_BREAK` add broken axes.
+
+Three launchers:
+
+| launcher | runs |
+|---|---|
+| `run_matdyn.sh` | SLURM: `matdyn.x` over the chunks and the merge of all three outputs, in one job. Refuses to start if the base namelist lacks its closing `/` or has lines after it |
+| `run_generate.sh` | SLURM: every archive, `NPAR` at a time, resumable, then `verify-archives` |
+| `run_generate.ps1` | the same for PowerShell 7 on Windows; `-Throttle 1` on Windows PowerShell 5.1 |
+
+---
+
+## From Python
+
+```python
+import numpy as np, xphd
+
+arc = xphd.ExcPhArchive("GI_ExcPh_Q0001.npz")
+arc.check()
+
+hw  = np.load("hw_fine.npy")
+res = xphd.compute(arc, [10, 77, 150, 300], hw_fine=hw, refine=15,
+                   acoustic_cut=5e-4)
+res.report()
+res.save("lw_gamma.npz")
+
+for lab, tot, em, ab, tau in res.by_manifold(it=0):
+    print(lab, tot, tau)
+```
+
+Every command is also a function: `xphd.cli.main(["parity", "--nv", "3"])`,
+or import the module — `from xphd.parity import main`.
+
+---
+
+## Reading the diagnostics
+
+### `channels` — where a linewidth comes from
+
+```bash
+xphd channels GI_ExcPh_Q0001.npz --state 1 --T 10
+```
+
+Splits `Gamma` into `DOS x |G|^2` per channel. Bare DOS should be O(1–100)/eV;
+orders of magnitude more means a few near-degenerate triangles carry the delta
+surface and the mesh cannot support the integration at all.
+
+> Concentration falls with temperature simply because more channels open.
+> Compare **across meshes at fixed T**, and the lowest T is the most
+> stringent. A high share for the lowest state is often correct — it may have
+> only a handful of energetically open channels.
+
+### `frohlich` — electron/hole cancellation
+
+```bash
+xphd frohlich GI_ExcPh_Q0001.npz
+```
+
+Needs `Ge_grid`/`Gh_grid` — which the generator now refuses to omit. `C << 1`
+is destructive, `C ~ 1` independent, `C > 1` constructive. The cancellation
+only switches on for `q * a_exc << 1`, so on a coarse mesh partial
+cancellation may be the correct answer.
+
+Everything is element-wise and summed over degenerate branch groups — taking
+`max|Ge|` and `max|Gh|` at different exciton indices manufactures a false
+failure, and splitting a degenerate pair is meaningless.
+
+### `localization` / `gauge` — can the amplitude be interpolated?
+
+```bash
+xphd localization GI_ExcPh_Q0001.npz --hex 2.50     # the material's lattice constant
+xphd gauge        GI_ExcPh_Q0001.npz --hex 2.50
+```
+
+`localization` transforms `G(q)` onto the Born–von Kármán lattice and compares
+against a **randomised-phase control**. Signal indistinguishable from null
+means the complex amplitude is not in a smooth gauge.
+
+`gauge` then attributes it, via `D_{nu nu'} = sum_beta G_nu G*_nu'`, which is
+exciton-gauge invariant:
+
+| | H1 | H2 | H3 |
+|---|---|---|---|
+| raw `G` | high | high | high |
+| `D` off-diagonal | **low** | high | high |
+| `D` diagonal | low | **low** | high |
+| meaning | exciton gauge | both gauges | not a gauge problem |
+
+Under H3, stop and check the q-ordering and the IBZ unfold.
+
+---
+
+## Convergence series
+
+```bash
+for N in 6 8 12 18 24; do
+  xphd check      $N/GI_ExcPh_Q0001.npz
+  xphd matdyn     $N/bn_${N}x${N}_360.freq --fine 360 --nbnd 6 \
+                  --npz $N/GI_ExcPh_Q0001.npz -o $N/hw_fine.npy
+  xphd linewidth  $N/GI_ExcPh_Q0001.npz --hw-fine $N/hw_fine.npy \
+                  --T 10 300 --acoustic-cut 5e-4 -o $N/lw.npz
+  xphd channels   $N/GI_ExcPh_Q0001.npz --state 1 --T 10
+done
+```
+
+or `python examples/convergence_series.py`.
+
+**The series is confounded.** The BSE k-mesh *is* the q-mesh, so exciton
+energies converge alongside the q-integration and both move together. Report
+the absorbance convergence separately and cross-reference it.
+
+**Track states by energy, not index.** Degeneracies split and reorder between
+meshes — states 1 and 2 may be degenerate at 6×6 and 10 meV apart at 12×12.
+
+**Report the low-lying states.** The top of the window is the least converged
+in the BSE and the noisiest; treat it as a convergence device, not a result.
+
+**Watch the gaps between valleys, not only the absolute energies.** On hBN the
+exciton moves down by 200–280 meV from 18×18 to 24×24, which is the binding
+energy converging — but the K–Γ offset also changes, from 60 to 150 meV, and
+that ordering is what a comparison between materials rests on.
+
+Also worth running: the state-window curve `Gamma(N_states)` by truncating the
+arrays you already have. `Gamma` rises monotonically with the window because
+each added final state is a new non-negative term, but it must flatten once
+energy conservation and matrix-element decay shut the terms off. Still rising
+at your largest window means the window, not the mesh, is the constraint.
+
+---
+
+## Method
+
+| quantity | treatment |
+|---|---|
+| exciton energies `E_m(Q+q)` | a local quadratic around each mesh point, from its six neighbours (`--band-interp local`); nodes exact, no ringing |
+| phonon energies `hw(q)` | `matdyn.x` on the fine mesh, **not** interpolated |
+| couplings `\|G\|^2` | held **constant** per coarse cell |
+
+Delta functions are integrated analytically by the 2D linear-triangle
+(tetrahedron) method — no broadening parameter. The delta argument
+`E_n - E_m(q) -/+ hw(q)` is assembled on the fine mesh *before* the triangle
+linearisation, which is what the analytic formula assumes.
+
+Linewidths are FWHM, so `tau = hbar / Gamma`.
+
+### Why the couplings are not interpolated
+
+1. **The complex amplitude is not in a smooth gauge.** BSE and phonon
+   eigenvectors carry an arbitrary phase at each q. Symmetry expansion from
+   the irreducible wedge fixes the relative phase *within a star of q* and
+   establishes nothing between inequivalent wavevectors.
+2. **`|G|^2` has cusps at the symmetry nodes**, so interpolating the scalar
+   rings and can go negative.
+
+Holding it constant per cell is the standard tetrahedron treatment.
+`--scheme fft` runs the alternative if you want the comparison.
+
+---
+
+## Pitfalls this package handles
+
+Each corrupts results silently; none raises an error on its own.
+
+### Integration
+
+- **Nearest, not floor, in the constant-coupling upsampling.** `np.repeat`
+  places each coarse point at the *edge* of its cell, so fine points folding to
+  `|q| ~ 0` receive the coupling from `q = -1/n`. Pairing a finite acoustic
+  coupling with a vanishing `omega` makes the Bose factor diverge and produces
+  spurious low-temperature absorption.
+- **Hexagonal minimum image.** Wrapping each index independently into
+  `[-n/2, n/2)` gives the wrong shortest lattice vector on a non-orthogonal
+  cell.
+- **Nyquist splitting in the Fourier refinement.** Without it the interpolant
+  acquires an imaginary part and no longer passes through the source values.
+- **`flat_width` tracks the fine mesh, not the refinement ratio.** Triangles on
+  a 360×360 grid are the same size whatever the source was, so a tolerance that
+  scales with `r` silently restores Lorentzian broadening — and varies two
+  things at once across a convergence series.
+- **Complete degenerate manifolds.** Individual members depend on the arbitrary
+  rotation the diagonaliser picked; only manifold sums are invariant.
+- **One triangle-weight kernel.** `delta_weights_2d` and `triangle_weights`
+  share `_tri_weights`, so the flat-branch regularisation cannot drift. An
+  independent implementation that folds the fractional area into a prefactor
+  and *also* multiplies by the unit-triangle area 1/2 comes out a factor of two
+  low.
+- **Detailed balance is imposed on the geometric weight, not the rate.** Naive
+  assembly takes the weight from the triangle containing `q` in one direction
+  and `-q` in the other; those differ, so `P_ij/P_ji != exp(w/kT)` and no
+  distribution is stationary.
+
+### Indices and orderings
+
+- **`ndb.BS_diago_Q{n}` is numbered over the irreducible wedge; archives over
+  the full zone.** Pairing the two numbers opens the wrong database for every
+  point but Γ. Every command that reads BSE databases finds them through
+  `lat.kpoints_indexes`, in one shared helper (`xphd/yambo.py`).
+- **`generate` takes a 0-based index in the lattice's k-ordering**, which need
+  not be row-major. `xphd ibz` prints exactly those indices, built the way the
+  generator builds them; an index worked out on a row-major mesh can name the
+  wrong wavevector.
+- **Single-precision q-points need tolerances above float32 noise.** hBN's
+  carry about 1e-7 in reduced coordinates. `mesh_indices` once rejected them at
+  1e-6; `star_map` at 1e-6 starts *splitting stars* once the noise reaches
+  4e-7 — a genuine star member becomes its own "irreducible" point, with no
+  error. Every q-point tolerance is now 1e-4: a thousand times above float32
+  noise and still 200× below the half-spacing of a 24×24 mesh. Likewise
+  `xphd check` accepts a float32 electron/hole split (1e-5, as
+  `check-archive` does) instead of reporting a correct archive as failed.
+- **A band minimum loses its only channel by default.** Its small-q acoustic
+  absorption lives inside the cell around q = 0, where the coupling is the
+  q = 0 value — zero by the sum rule. Use `--acoustic-model q2`, not `auto`.
+  `--n-shell` below the fit's minimum was once raised to 3 without notice, and
+  `q2` once kept the slope from a fit that also had a constant; both are fixed.
+- **Fourier-interpolated exciton bands ring from every crossing.** Bands are
+  energy-ordered, so each crossing is a kink, and a global interpolant carries
+  its ringing across the zone — to band minima included, where the
+  linewidth depends on the curvature. Fixing only the cell at the minimum is
+  not enough: on a test valley that left a 58% error, because the rung
+  neighbouring cells open spurious channels of their own. The local
+  quadratic everywhere removes it.
+- **Matching wavevectors on rounded coordinates fails at the cell boundary.** A
+  coordinate within rounding of 1.0 maps to 0.0 on one side and 1.0 on the
+  other. Every match is a periodic nearest-neighbour search, checked to be a
+  bijection.
+- **`matdyn` q-ordering** is positional, not matched, because matdyn reports q
+  in cartesian units regardless of input convention.
+- **The transport needs every Q.** A missing archive enters with zero energy and
+  becomes a sink; `verify-archives` checks the whole set.
+
+### Symmetry
+
+- **The little group is computed, not named.** At M only one C2' and one σ_v fix
+  a given M; selecting operations by class label admits all three of each.
+- **No symmetry pairs states at K.** C3h is Abelian; σ_v·T fixes K but leaves
+  each C3 eigenvalue unchanged and squares to +1, so it adds no degeneracy.
+  (An earlier version of this README claimed the opposite.) And the A / E₁ / E₂
+  label at K is relative to the chosen C3 axis; only the parity is absolute.
+- **One representative per class.** In C3h, `C3` and `C3²` carry conjugate
+  characters; averaging them destroys the phase.
+- **Unitarity before labels.** A representation that is not unitary on the
+  lowest manifold gives labels that mean nothing.
+- **A fractional parity is never physics.** σ_h cannot couple an even band pair
+  to an odd one, so a non-degenerate exciton has `chi = ±1` exactly. A
+  fractional value means the band parities are attached to the wrong
+  transitions, or degenerate bands are mixed at the dominant k-points.
+- **Finite-Q pairing: yambo stores the electron at the table index k and the
+  hole at k+Q.** Of the four ways to attach the shift, only this one gives
+  `|chi| = 1` for every state at all 61 Q-points of GaN; the others reach 35%
+  at most. Earlier versions put the electron at k+Q — exact at Q = 0 only —
+  which produced a spurious ring of fractional parity around Γ. **Parity maps,
+  finite-Q irreps and ARPES maps from earlier versions must be regenerated**;
+  linewidths, the BTE and luminescence do not use this pairing and are
+  unchanged.
+- **Degenerate partners carry no individual character** for most operations —
+  but σ_h commutes with every operation of D3h, so by Schur's lemma it acts as a
+  multiple of the identity within any irrep, and the parity of a single member
+  of a doublet *is* well defined.
+
+### yambo, yambopy and QE
+
+- **`YamboDipolesDB` can return the wrong conduction bands.** On a file storing
+  all valence against all bands it may flag the system as open-shell and start
+  the conduction axis at band 0. It returns a wrong shape rather than raising,
+  so the `quick_read_dipoles` fallback in `exc_dipoles_pol` never runs — and
+  that fallback assumes a square band block, so it cannot read such a file
+  either. `xphd dipoles` selects the right bands and validates against yambo's
+  residuals.
+- **Single-precision e-ph elements.** Evaluating the electron and hole parts
+  separately then summing differs from the combined call at float32 rounding,
+  about 1e-7 relative; a tolerance of 1e-10 rejects a correct split.
+- **NumPy's einsum size-mismatch message** prints the size already recorded
+  from the *previous* operand in the slot labelled with the current one. Read
+  it the natural way and you blame the wrong array.
+- **Exciton photoemission sits at `E_S + eps_v`, not `E_S − eps_v`.** The two
+  agree only where `eps_v = 0`, so a check at the valence maximum on a
+  zeroed reference cannot tell them apart; on the absolute `ns.db1`
+  reference the wrong sign moves the signal by `2|eps_v|`, and elsewhere it
+  inverts the replica. `xphd arpes` once used the wrong sign, and its test
+  checked a single number computed from that same formula. The tests now
+  check the physics: below the conduction band by `E_b`, and a replica
+  with the valence dispersion.
+- **`matdyn` writes a header on every q-block**, not once per file.
+- **A `matdyn` namelist with no closing `/`** hangs until the wall-clock limit.
+- **`matdyn.x` is serial**; `mpirun` does not help. Split the q-list.
+
+### Defaults from another material
+
+Each of these was once defaulted to GaN and gave a wrong answer on hBN with no
+error. None has a default now, or the README says where to change it:
+
+- `--masses` (mode classification) — GaN's Ga/N masses on hBN.
+- `--alat` (transport figures) — 3.2, which is neither hBN's 2.50 nor quite
+  GaN's 3.23; it distorts every k-distance and the zone boundary.
+- the BSE band window — GaN's `[6, 12]` is all conduction on hBN, whose 8
+  electrons fill 4 bands. It is now always read from the BSE.
+- the PL window in `fatbands_pl.py` and in yambopy luminescence scripts — GaN's
+  3.2–4.0 eV returns an empty spectrum on hBN.
+- **leftover files.** GaN and hBN share 6 modes, 15 excitons and 576 q-points,
+  so a GaN `Ex-ph.npy` or `exc_dipoles.npy` left in an hBN directory loads
+  without any error and silently hands you GaN's coupling. Regenerate them.
+
+---
+
+### Reading yambo's quasiparticle output
+
+With `ExtendOut`, `o-*.qp` lists `K-point, Band, Eo, E, E-Eo, Vxc, Vnlxc,
+Sc|Eo, ...`: the fourth column is the quasiparticle energy, not the
+correction. Reading it by position once produced a false diagnosis (a supposed
+`KfnQPdb` fault; there is none). Read columns by name, as `cb_splitting.py` and
+`qp_decompose.py` do.
+
+### RIM-W
+
+RIM-W worked for GaN and hBN (spinless, 24x24). For WSe2 (spinors, 12x12) it
+broke both the GW (gap correction at K: 0.10 eV with it, 1.18 eV without) and the
+BSE kernel (excitons above their bare transitions). The cause is not isolated --
+spinors, the coarser mesh and the RIM-W settings all differed. Check that the gap
+correction and the binding energy are plausible; if in doubt, compare a run
+without `rim_w` (keep `rim_cut`).
+
+---
+
+## Real-time BTE
+
+```python
+from xphd import bte
+
+arcs = xphd.load_archives("GI_ExcPh_Q*.npz")     # one archive per Q
+rm   = bte.build_rates(arcs, T=300.0, acoustic_cut=5e-4)
+bte.check_balance(rm, N_tot=1e-3)
+
+F0  = bte.inject_optical(arcs[(0,0)].E_n, osc, 1e-3,
+                         center=2.40, sigma=0.018)
+sol = bte.propagate(rm, F0, t_end=10000.0, nt=12)
+```
+
+Optionally refine the out-rates and rescale rows. The matrix cannot be refined
+— each q is a state, so its size grows as `f^4` — but the row sum is an
+ordinary BZ integral and can be:
+
+```python
+ref = bte.refined_out_rates(arcs, T=300.0, refine=5)
+rm, s = bte.rescale_rows(rm, ref)
+```
+
+**Injection.** Light carries no momentum, so a pump fills only the light cone —
+on any practical mesh, the `Q = 0` point alone. Population goes as `|d|^2`
+times the pump lineshape, and only *relative* oscillator strengths matter since
+the result is normalised. Uniform injection starts the run with population a
+laser could not have created and erases bright-to-dark transfer before `t = 0`.
+`inject_thermal` is a phenomenological hot distribution across the whole zone,
+not optical injection.
+
+**Read the Boltzmann row** of `check_balance`. In the dilute limit the
+stimulated `(1+F)` factors are negligible and a dilute boson gas thermalises to
+Boltzmann; the Boltzmann factor enters through `(1+N)/N` inside `P`, not as a
+ratio between `P` and `Q`.
+
+**In and out.** The transport equation contains an out-scattering term, which
+reduces to `Gamma_i / hbar` in the dilute limit, and an in-scattering term
+through which population accumulates. In `scripts/bte_figure.py` the markers
+on the dispersion resolve the **in**-scattering — the channel *filling* each
+state — while the flux bars give the **out**-scattering summed over all
+occupied states. A circle at the minimum therefore means excitons arrive there
+by emitting a phonon; it says nothing about how they leave.
+
+---
+
+## Layout
+
+```
+src/xphd/
+  core/          mesh.py  interp.py  stats.py
+  io/            excph.py  matdyn.py
+  generate/      dmats.py  archive.py  check.py  verify.py
+  diagnostics/   channels  frohlich  localization  gauge  interference
+                 coherence  decompose_parity  asr  planar  bte_check
+                 effective_mass  mott_wannier
+  tetra.py       triangle weights (one kernel, two entry points)
+  linewidth.py   the FGR driver, one Q
+  sweep.py       every Q -> the Gamma(Q) field
+  symmetry.py    stars, unfolding, violation metrics
+  excsym.py      character tables, representation matrices, finite-Q shift
+  yambo.py       shared yambo readers; the irreducible-parent mapping
+  parity.py  irreps.py  selection.py        symmetry commands
+  dipoles.py  chirality.py  lineshape.py  selfenergy.py   optics
+  bte.py  arpes.py                          dynamics
+  band_parity.py                            band mirror parity
+  mirror.py      sigma_h atom permutation and phonon parity (planar and not)
+  manifold.py    sigma_h inside near-degenerate manifolds (--rotate)
+  banner.py      the start-up banner
+  modes.py  mode_labels.py  matdyn_split.py phonons
+  cli.py
+scripts/         figures, diagnostics and launchers (SETTINGS style)
+scripts/user/    your own figure scripts, as provided
+docs/            xphd_handbook.pdf; handbook_partII/ (LaTeX + BibTeX)
+tests/           pytest; none needs yambopy
+examples/        make_qlist.py  convergence_series.py
+```
+
+A new command is a module with `main(argv=None)` registered in `DELEGATED` in
+`cli.py`, with tests in `tests/`. Import yambopy **after** `parse_args`, so
+`--help` works without it.
+
+---
+
+## References
+
+Jepsen & Andersen, Solid State Commun. **9**, 1763 (1971);
+Lehmann & Taut, Phys. Status Solidi B **54**, 469 (1972);
+Rath & Freeman, Phys. Rev. B **11**, 2109 (1975) — analytic tetrahedron.
+Kawamura, Gohda & Tsuneyuki, Phys. Rev. B **89**, 094515 (2014) — why the
+Blöchl curvature correction does not apply here.
+Nalabothula, Sangalli, Paleari, Reichardt & Wirtz, *Symmetries of excitons*,
+Phys. Rev. B (2026) — conventions and the star-of-q gauge statement.
+Bajaj, Venkatareddy, Krishnamurthy & Jain, Phys. Rev. B **112**, 245127 (2025)
+— symmetries at zero and finite centre-of-mass momentum.
+Chen, Sangalli & Bernardi, Phys. Rev. Lett. **125**, 107401 (2020);
+Antonius & Louie, Phys. Rev. B **105**, 085111 (2022) — exciton-phonon theory.
+Perfetto, Sangalli, Marini & Stefanucci, Phys. Rev. B **94**, 245303 (2016) —
+excitonic photoemission.
+Sohier, Gibertini, Calandra, Mauri & Marzari, Nano Lett. **17**, 3758 (2017) —
+LO–TO in 2D; Sohier, Calandra & Mauri, Phys. Rev. B **94**, 085415 (2016) —
+2D Fröhlich.
+Qiu, Cao & Louie, Phys. Rev. Lett. **115**, 176801 (2015) — the `|Q|`-linear
+exciton cusp that limits Fourier refinement.
+
+
+## Near-degenerate manifolds (`--manifold-tol`, `--rotate`)
+
+An exact sigma_h gives every non-degenerate exciton an exact parity, but two
+states of opposite parity lying within a fraction of a meV of each other can
+come back from the BSE solver mixed: a symmetry-breaking error of ~10 ueV in
+the computed Hamiltonian is enough. Their per-state chi then falls short of
++-1 and `selection-rule` must either guess (counting a forbidden residue) or
+exclude them (counting them undefined). In WSe2 with spin-orbit coupling such
+pairs are common: one pair 0.13 meV apart gave a 1e-4 to 1e-3 residue, and
+excluding mixed states at --tol 0.96 left 22-49% of the coupling undefined.
+
+`xphd parity --manifold-tol 0.005` (the default) stores, for every irreducible
+Q, the sigma_h matrix <m|sigma_h|n> within each group of states closer than
+the tolerance, and for every full-zone point whether it is reached by an
+operation containing time reversal (the same rule as `xphd generate`).
+`xphd selection-rule --rotate` diagonalises each manifold's matrix (conjugated
+for time-reversed points) and splits the complex coupling |v_i^H G|^2 by the
+eigen-parities: nothing is excluded for being mixed, and the total is
+unchanged. Conventions are in `xphd/manifold.py`.

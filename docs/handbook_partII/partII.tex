@@ -1,0 +1,502 @@
+\documentclass[10pt,a4paper]{article}
+\usepackage[a4paper,left=1.8cm,right=1.8cm,top=2.0cm,bottom=1.8cm]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[scaled=0.94]{helvet}
+\renewcommand{\familydefault}{\sfdefault}
+\usepackage{amsmath,amssymb,bm}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{fancyhdr}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage[numbers,sort&compress]{natbib}
+\definecolor{ink}{HTML}{1B2A41}
+\definecolor{accent}{HTML}{1F5F8B}
+\usepackage[colorlinks=true,linkcolor=accent,citecolor=accent,urlcolor=accent]{hyperref}
+\usepackage{url}
+
+\titleformat{\section}{\Large\bfseries\color{ink}}{\thesection.}{0.6em}{}
+\titleformat{\subsection}{\large\bfseries\color{accent}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{ink}}{\thesubsubsection}{0.6em}{}
+\titlespacing*{\section}{0pt}{1.4ex plus .5ex}{0.8ex}
+\titlespacing*{\subsection}{0pt}{1.2ex plus .4ex}{0.5ex}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\small\color{accent}xphd handbook --- Part II: methods and derivations}
+\fancyfoot[R]{\small\color{gray}\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\headrule}{\hbox to\headwidth{\color{gray!40}\leaders\hrule height \headrulewidth\hfill}}
+
+\setlength{\parskip}{0.45ex}
+\setlength{\parindent}{0pt}
+\newcommand{\tbd}[1]{\textcolor{red}{[#1]}}
+\newcommand{\G}{\mathcal{G}}
+\newcommand{\bq}{\mathbf{q}}
+\newcommand{\bQ}{\mathbf{Q}}
+\newcommand{\bk}{\mathbf{k}}
+\newcommand{\bK}{\mathbf{K}}
+\newcommand{\bb}{|\mathbf{b}|}
+
+\begin{document}
+\setcounter{page}{25}
+\setcounter{section}{11}
+
+\thispagestyle{fancy}
+{\color{ink}\huge\bfseries Part II --- Methods and derivations\par}
+\vspace{0.6ex}
+{\color{accent}\large The physics and numerics behind the xphd results: every
+formula the code evaluates, how it is derived, and how each was checked\par}
+\vspace{1.2ex}
+
+Part~I (pages 1--24) explains the package: the commands, scripts, data files and
+material walkthroughs. Part~II collects the methods behind them. Each section
+states the quantity, derives the working formula, describes how it is evaluated
+on the mesh, and gives the checks that established it, with the numbers
+obtained for GaN, hBN and WSe$_2$. Results that are still pending are marked
+\tbd{in red}. The references at the end carry their verification status in the
+accompanying \texttt{partII.bib}: entries marked VERIFY there should be checked
+before they are cited in a paper.
+
+\vspace{0.6ex}
+{\setlength{\parskip}{0pt}\small\tableofcontents}
+
+\section*{Errata to Part I (4 October 2026)}
+\addcontentsline{toc}{section}{Errata to Part I}
+\begin{enumerate}[nosep,leftmargin=1.4em]
+\item \textbf{No \texttt{KfnQPdb} fault.} Sections 6.4, 9.1, 9.2 and the pitfalls
+table of Sec.~10 state that \texttt{Yambo}'s \texttt{KfnQPdb} applied the
+quasiparticle corrections without the Kohn-Sham energies. That is wrong. With
+\texttt{ExtendOut}, \texttt{o-*.qp} lists \texttt{K-point, Band, Eo, E, E-Eo,
+Vxc, Vnlxc, Sc|Eo, \ldots}: the fourth column is the quasiparticle energy $E$,
+and reading it as $E-E_o$ produced the false diagnosis. \texttt{KfnQPdb} applies
+\texttt{ndb.QP} correctly; the report's \texttt{[K+QP]} gap is the true
+quasiparticle gap.
+\item \textbf{The numbers of Sec.~9.1.} The values quoted there as corrections
+at $\bK$ ($-0.4709$, $+0.8867$, $+0.8716$~eV for bands 62, 63, 64) are the
+quasiparticle energies. The corrections of that (RIM-W) GW are $-0.471$,
+$-0.373$ and $-0.425$~eV: it opened the gap at $\bK$ by only $+0.098$~eV (the
+report's 1.3576~eV) and put band 64 below band 63 by 15~meV (not ``+37.2 to
++22.2~meV''). That ordering, not a code fault, is why the BSE with the database
+put the bright exciton lowest.
+\item \textbf{The scissor.} The 1.357578~eV scissor of the WSe$_2$ BSE runs is that
+GW's quasiparticle gap at $\bK$, not its correction; those runs used a gap of
+2.617~eV at $\bK$. The GW without RIM-W gives a correction of $+1.181$~eV
+(gap 2.440~eV for 62$\to$63, 2.422~eV for 62$\to$64).
+\item \textbf{RIM-W, scope.} Sections 6.4 and 10 of Part~I advise dropping
+\texttt{rim\_w} in general. That holds for WSe$_2$ only: there it broke the BSE
+kernel and the GW (gap correction at $\bK$ $+0.10$~eV with it, $+1.18$~eV without),
+whereas GaN and hBN ran correctly with RIM-W. The cause is not isolated (spinors,
+the $12\times12$ mesh and the RIM-W settings all differed). Check the plausibility
+of the gap correction and of the binding energy; if in doubt, compare a run
+without \texttt{rim\_w}.
+\item \textbf{Tools.} \texttt{cb\_splitting.py} read \texttt{o-*.qp} by position and
+misread \texttt{ExtendOut} files; it now reads columns by header name, as
+\texttt{qp\_decompose.py} does, and reports band edges and the direct or indirect
+gap (Sec.~\ref{sec:gw}).
+\end{enumerate}
+
+% =====================================================================
+\section{Notation and conventions}
+% =====================================================================
+\label{sec:notation}
+
+\textbf{Lattice.} The hexagonal reciprocal basis $\mathbf{b}_1,\mathbf{b}_2$
+encloses 60$^\circ$; reduced coordinates $(q_1,q_2)$ give
+$\bq=q_1\mathbf{b}_1+q_2\mathbf{b}_2$, and lengths are quoted in units of
+$|\mathbf{b}|=|\mathbf{b}_1|$. In these units the Brillouin zone has area
+$A_{\mathrm{BZ}}=\sqrt3/2$, $\bK=(1/3,1/3)$, $\bK'=(2/3,2/3)$ and the
+$\mathbf{M}$ points are the edge midpoints, e.g.\ $(1/2,0)$. The source mesh is
+$N\times N$ ($N=24$ for GaN and hBN, 12 for WSe$_2$), with spacing $h=1/N$; the
+refined mesh used for integration is $360\times360$.
+
+\textbf{Electron-phonon elements.} Computed by \texttt{LetzElPhC}
+\cite{LetzElPhC} in the \texttt{Yambo} convention,
+$g_{n'n\nu}(\bk,\bq)=\langle\psi_{n'\bk}|\Delta_{\nu\bq}V|\psi_{n,\bk-\bq}\rangle$,
+and converted to the standard convention before projection. The phonon
+displacement normalisation is that of DFPT \cite{Baroni2001,Giustino2017}.
+
+\textbf{Exciton envelopes.} The BSE is solved with \texttt{Yambo}
+\cite{Sangalli2019} at every irreducible $\bQ$: for GaN with the
+subspace-iteration solver of SLEPc \cite{Hernandez2005}, for WSe$_2$ by full
+diagonalisation (matrices of dimension 2304). We write $A^{S\bQ}_{vc\bk}$ with the electron at
+$\bk$ and the hole at $\bk-\bQ$. \texttt{Yambo}'s BSE tables store the electron
+at the table index $\bk$ and the hole at $\bk+\bQ$, i.e.\ the exciton at $-\bQ$
+in this convention. Time reversal gives the excitons at $\bQ$ and $-\bQ$ the same
+energies and parities, so nothing physical changes, but every formula that
+pairs an electron and a hole must use the stored pairing (Sec.~\ref{sec:excparity}).
+
+\textbf{Archives.} An archive \texttt{GI\_ExcPh\_QXXXX.npz} stores, for one
+exciton momentum $\bQ$, the complex amplitudes
+$G[\bq,\nu,\lambda,\beta]=\langle\beta,\bQ+\bq|\partial V_\nu|\lambda,\bQ\rangle=\G_{\beta\lambda\nu}(\bQ,\bq)$
+in eV, for every $\bq$ of the source mesh, every branch $\nu$, initial state
+$\lambda$ at $\bQ$ and final state $\beta$ at $\bQ+\bq$, together with
+$|\G|^2$, its electron and hole parts, and the energies. The final envelope is
+the conjugated one, as in \texttt{Yambopy} \cite{Yambopy}.
+
+% =====================================================================
+\section{Exciton-phonon matrix elements}
+% =====================================================================
+\label{sec:excph}
+
+\subsection{Definition}
+The exciton-phonon matrix element is the sum of a hole and an electron term, in
+each of which one carrier scatters while the other is a spectator
+\cite{Antonius2022,Chen2020}:
+\begin{equation}
+\begin{split}
+\G_{\beta\lambda\nu}\!\left(\bQ,\bq\right) ={}&
+\sum_{v,v',c,c',\bk}
+A_{\lambda,\bQ}^{v,c,\bk}
+\!\left[g_{vv',\nu}\!\left(\bk-\bQ,\bq\right)\delta_{c,c'}\right]
+\left(A_{\beta,\bQ+\bq}^{v',c',\bk}\right)^{\ast}\\
+&-\sum_{v,v',c,c',\bk}
+A_{\lambda,\bQ}^{v,c,\bk}
+\!\left[g_{c'c,\nu}^{\ast}\!\left(\bk+\bq,\bq\right)\delta_{v,v'}\right]
+\left(A_{\beta,\bQ+\bq}^{v',c',\bk+\bq}\right)^{\ast}.
+\end{split}
+\label{eq:G}
+\end{equation}
+
+\subsection{Gauge}
+Both factors in Eq.~(\ref{eq:G}) are built from the same Kohn-Sham wavefunctions
+(one \texttt{Yambo} SAVE for \texttt{LetzElPhC} and the BSE), so they share one
+single-particle gauge. Two freedoms remain on the exciton side.
+
+\emph{Overall phases.} Replacing $A^{\lambda}\to e^{i\theta_\lambda}A^\lambda$ and
+$A^{\beta}\to e^{i\theta_\beta}A^\beta$ multiplies $\G_{\beta\lambda\nu}$ by
+$e^{i(\theta_\lambda-\theta_\beta)}$, which cancels in $|\G_{\beta\lambda\nu}|^2$.
+
+\emph{Degenerate manifolds.} Within a degenerate manifold $\mathcal{M}$ the
+solver's basis is arbitrary: $|\beta'\rangle=\sum_{\beta\in\mathcal{M}}U_{\beta\beta'}|\beta\rangle$
+with $U$ unitary. Then $\sum_{\beta'\in\mathcal{M}}|\G_{\beta'\lambda\nu}|^2=\sum_{\beta\in\mathcal{M}}|\G_{\beta\lambda\nu}|^2$,
+and likewise for the initial manifold. Only sums over complete manifolds are
+basis-independent, and every invariant used below is such a sum.
+
+\subsection{Excitons on the full zone}
+The BSE is solved only at the irreducible momenta (61 for a $24\times24$ mesh,
+19 for $12\times12$). The exciton at any other momentum is the image of its
+irreducible parent under the operation $R$ that maps one to the other
+\cite{Nalabothula2026}:
+\begin{equation}
+A^{S,R\bQ}_{vc,R\bk}=\sum_{v'c'}D^{c}_{cc'}(R;\bk)\,A^{S\bQ}_{v'c',\bk}\,
+\bigl[D^{v}_{vv'}(R;\bk-\bQ)\bigr]^{*},
+\label{eq:rotate}
+\end{equation}
+where $D^{n}(R;\bk)$ are the single-particle rotation matrices in the BSE band
+window, computed by \texttt{LetzElPhC}. For an operation that includes time
+reversal the parent envelope is complex conjugated first. The point is not to
+fix phases -- they cancel anyway -- but to make every member of a star the exact
+symmetry image of the same parent; a mapping that does not do so breaks the
+symmetry of $|\G|^2$.
+
+\subsection{Symmetry tests}
+\emph{Star uniformity.} The integrated strength
+$T(\bq)=\sum_{\nu\lambda\beta}|\G_{\beta\lambda\nu}(\bQ=0,\bq)|^2$, summed over
+all branches and complete manifolds, must be identical for every member of a
+star \cite{Dresselhaus2008,BradleyCracknell1972,Maradudin1968}. For GaN the
+ratio $T_{\max}/T_{\min}$ within a star is 1.0001 for the reconstructed full
+zone, against 2.25 for an initial output whose excitons at the star members were
+not constructed as images of a common parent.
+
+\emph{Manifold-resolved test} (\texttt{xphd check-archive}). For an archive at a
+time-reversal-invariant $\bQ$, define for each $\bq$
+$S_{abc}(\bq)=\sum_{\nu\in a}\sum_{\lambda\in b}\sum_{\beta\in c}|\G_{\beta\lambda\nu}(\bQ,\bq)|^2$
+over phonon manifolds $a$ (branches within 0.1~meV), initial manifolds $b$ and
+final manifolds $c$ (states within a tolerance, default 15~meV). Symmetry
+requires $S(\bq)=S(g\bq)$ for $g=$ time reversal ($\bq\to-\bq$) and $g=C_3$. The
+reported deviation is
+\begin{equation}
+L_1=\frac{\sum_{\bq}\sum_{abc}|S_{abc}(\bq)-S_{abc}(g\bq)|}
+{\tfrac12\sum_{\bq}\sum_{abc}\bigl[S_{abc}(\bq)+S_{abc}(g\bq)\bigr]} ,
+\end{equation}
+with OK below $10^{-2}$ and FAIL above $5\times10^{-2}$. The C$_3$ matrix in
+reduced coordinates depends on the angle between $\mathbf{b}_1$ and
+$\mathbf{b}_2$: $(q_1,q_2)\to(-q_1-q_2,q_1)$ for 60$^\circ$ and
+$(-q_2,q_1-q_2)$ for 120$^\circ$; the code takes the one that leaves the exciton
+energies invariant. Results: GaN $1.3\times10^{-3}$ (time reversal) and
+$3.3\times10^{-3}$ (C$_3$); WSe$_2$ $1.2\times10^{-3}$ and $1.0\times10^{-3}$. A
+rotation fault shows as one operation far above the other.
+
+\emph{Exchange-split doublets.} At $\bQ=0$ the BSE evaluates the long-range
+exchange along one direction $\hat{\mathbf{e}}$, splitting each E$'$ doublet
+into members polarised parallel and perpendicular to $\hat{\mathbf{e}}$ (GaN:
+2.8~meV for the first bright doublet, 10~meV for the second). For a member with
+real in-plane dipole $\mathbf{d}$, the coupling to small-$\bq$ polar phonons
+carries the factor $|\hat\bq\cdot\mathbf{d}|^2$. It is unchanged by
+$\bq\to-\bq$ but not by C$_3$, which rotates $\hat\bq$ relative to the fixed
+$\mathbf{d}$. Summed over the doublet, $|\hat\bq\cdot\mathbf{d}_\parallel|^2+
+|\hat\bq\cdot\mathbf{d}_\perp|^2=|\mathbf{d}|^2$ is isotropic. With 5~meV
+manifolds the GaN second doublet is split in two and the C$_3$ test fails
+($L_1=0.20$, all of it in that doublet and the LO branch at the smallest
+$|\bq|$); grouping it restores $3.3\times10^{-3}$.
+
+% =====================================================================
+\section{Mirror parity and selection rules}
+% =====================================================================
+\label{sec:parity}
+
+\subsection{The horizontal mirror}
+$\sigma_h$ maps $(x,y,z)\to(x,y,-z)$ and leaves every in-plane wavevector
+unchanged, so it belongs to the little group of every $\bQ$ and commutes with
+the Kohn-Sham, phonon and BSE Hamiltonians at every point of the zone. Every
+non-degenerate state therefore carries an exact parity across the whole zone.
+In a planar layer every atom lies in the mirror plane and maps onto itself; in
+1H-WSe$_2$ the mirror maps W onto itself and swaps the two Se, $\pi=[0,2,1]$.
+
+\subsection{Electrons}
+For spinless states the diagonal of $D(\sigma_h;\bk)$ gives
+$p_n(\bk)=\langle\psi_{n\bk}|\sigma_h|\psi_{n\bk}\rangle=\pm1$. With spin-orbit
+coupling $\sigma_h=I\,C_{2z}$ acts on spin as $e^{-i\pi\sigma_z/2}=-i\sigma_z$, so
+$\sigma_h^2=-1$ and the eigenvalues are $\pm i$. The label is
+$\lambda_n=\mathrm{Im}\,p_n=\pm1$, chosen so that an exciton's parity is still a
+product of labels (Sec.~\ref{sec:excparity}). WSe$_2$ gives
+$\langle D(\sigma_h)^2\rangle=-1.0000$, confirming that the spin rotation is
+included. At time-reversal-invariant points ($\Gamma$, $\mathbf{M}$) a spinor
+band is a Kramers pair with opposite eigenvalues, so no single label exists
+there. Time reversal maps $\bk\to-\bk$ and $+i\to-i$, so each band's label flips
+between $\bk$ and $-\bk$ and every band is exactly 50\% even: at the
+$\mathbf{K}$ band edges, where the orbitals are mirror-even $d$ states, the label
+is the out-of-plane spin, and this is spin-valley locking written as mirror
+parity.
+
+\subsection{Phonons}
+$\sigma_h$ acts on a displacement pattern $\mathbf{e}=(\mathbf{e}_\kappa)$ as
+$(\sigma_h\mathbf{e})_\kappa=M\,\mathbf{e}_{\pi(\kappa)}$ with $M=\mathrm{diag}(1,1,-1)$
+and $\pi$ the atom permutation (an involution). The parity of a normalised mode
+is
+\begin{equation}
+p_{\nu\bq}=\langle\mathbf{e}_{\nu\bq}|\sigma_h\mathbf{e}_{\nu\bq}\rangle
+=\sum_\kappa\mathbf{e}_{\nu\bq,\kappa}^{\dagger}\,M\,\mathbf{e}_{\nu\bq,\pi(\kappa)}=\pm1 .
+\label{eq:phparity}
+\end{equation}
+For a planar layer, $\pi=\mathrm{id}$ and $p=1-2w_z$ with
+$w_z=\sum_\kappa|e_{\kappa z}|^2$: out-of-plane modes are odd. In WSe$_2$ this
+shortcut fails for 34.4\% of $(\bq,\nu)$: the Se breathing mode A$'_1$ moves
+along $z$ yet is even, and the Se antiphase mode E$''$ moves in plane yet is odd.
+Equation~(\ref{eq:phparity}) gives $\pm1$ to $7\times10^{-16}$ there. The
+eigenvectors are taken from the electron-phonon database itself, in the order of
+the couplings: branches labelled from a separate \texttt{matdyn.x} run,
+ordered by its own frequencies, disagreed at 5\% of the points in GaN.
+
+\subsection{Excitons}
+\label{sec:excparity}
+Applying a rotation $R$ to exciton $T$ and projecting on $S$,
+\begin{equation}
+D_{ST}(R)=\sum_{\bk}\sum_{vc,v'c'}\bigl[A^{S}_{vc\bk}\bigr]^{*}D^{c}_{cc'}(R;\bk)\,
+A^{T}_{v'c',R^{-1}\bk}\bigl[D^{v}_{vv'}(R;\bk-\bQ)\bigr]^{*}.
+\label{eq:Dexc}
+\end{equation}
+For $\sigma_h$, $R^{-1}\bk=\bk$, and for non-degenerate bands
+\begin{equation}
+\chi_S\equiv D_{SS}(\sigma_h)=\sum_{vc\bk}|A^S_{vc\bk}|^2\,p_c(\bk)\,p_v^{*}(\bk-\bQ),
+\label{eq:chi}
+\end{equation}
+real and equal to $\pm1$ for spinless and spinor states alike (for spinors
+$p_cp_v^*=(\pm i)(\mp i)$ or $(\pm i)(\pm i)^*$). Using \texttt{Yambo}'s
+storage, the valence matrix must be taken at the hole's wavevector, $\bk+\bQ$ in
+table indices. Of the four ways of attaching the shift, only this one gives
+$|\chi_S|=1$ for every state (100\% of states at all 61 irreducible $\bQ$ in GaN,
+against at most 35\% for the others); the wrong pairing produced a fictitious
+ring of fractional parity around $\Gamma$.
+
+\subsection{Selection rule}
+The phonon perturbation transforms like its mode,
+$\sigma_h\,\partial V_\nu\,\sigma_h^{-1}=p_\nu\,\partial V_\nu$. Inserting
+$\sigma_h^\dagger\sigma_h=1$ twice,
+\begin{equation}
+\G_{\beta\lambda\nu}=\langle\beta|\sigma_h^\dagger(\sigma_h\partial V_\nu\sigma_h^{-1})\sigma_h|\lambda\rangle
+=p_\beta^{*}\,p_\nu\,p_\lambda\,\G_{\beta\lambda\nu},
+\end{equation}
+so $\G_{\beta\lambda\nu}\neq0$ only if $p_\beta p_\nu p_\lambda=+1$: an even
+phonon connects excitons of equal parity, an odd phonon excitons of opposite
+parity.
+
+\emph{Quantifying it} (\texttt{xphd selection-rule}). Each term
+$|\G_{\beta\lambda\nu}(\bq)|^2$ is classed as allowed, forbidden or undefined
+(a final state with $|\chi_\beta|$ below a tolerance). Results:
+\begin{itemize}[nosep,leftmargin=1.2em]
+\item GaN, bright state at $\Gamma$: forbidden/allowed $=5\times10^{-7}$.
+\item WSe$_2$, dark (odd) and bright (even) states at $\Gamma$: $1.4\times10^{-4}$
+and $1.0\times10^{-3}$ at tolerance 0.5, carried entirely by one pair of final
+states 0.13~meV apart and of opposite parity, at one star of 12 $\bq$, returned
+mixed by the solver ($|\chi|=0.915$, $0.951$). At tolerance 0.96:
+$1.8\times10^{-7}$ and $1.4\times10^{-7}$, with 22\% and 49\% of the coupling then
+undefined. With manifold rotation (Sec.~\ref{sec:manifold}), state~1:
+$6.3\times10^{-6}$ with 5.9\% undefined.
+\end{itemize}
+\texttt{where\_forbidden.py} separates three fingerprints of residual forbidden
+weight: a phonon swap (labels and couplings in different orders), a state mix (a
+near-degenerate opposite-parity partner, or $|\chi|<0.95$), and a diffuse
+admixture $\varepsilon=(1-|\chi|)/2$ (forbidden/allowed into a state scales as
+$\varepsilon$, state by state).
+
+\subsection{Irreducible representations at $\mathbf{K}$ and the emission rule}
+The little group at $\bK$ is C$_{3h}$, Abelian, with six one-dimensional
+irreducible representations (Table~\ref{tab:c3h}). Time reversal maps $\bK$ to
+$\bK'$ and adds no degeneracy at $\bK$; $\sigma_vT$ fixes $\bK$ but maps each
+C$_3$ eigenvalue to itself and squares to $+1$, so it adds none either. Which of
+A, E$_1$, E$_2$ labels a state depends on the C$_3$ axis (through Ga, N or the
+hexagon centre), because a Bloch sum at $\bK$ acquires a phase from sites off
+the axis; the $\sigma_h$ parity does not.
+
+\begin{table}[h]
+\centering\small
+\caption{Character table of C$_{3h}$, $\omega=e^{2\pi i/3}$.}
+\label{tab:c3h}
+\begin{tabular}{lcccccc}
+\toprule
+ & $E$ & $C_3$ & $C_3^2$ & $\sigma_h$ & $S_3$ & $S_3^5$\\
+\midrule
+A$'$ & 1 & 1 & 1 & 1 & 1 & 1\\
+A$''$ & 1 & 1 & 1 & $-1$ & $-1$ & $-1$\\
+E$'_1$ & 1 & $\omega$ & $\omega^2$ & 1 & $\omega$ & $\omega^2$\\
+E$'_2$ & 1 & $\omega^2$ & $\omega$ & 1 & $\omega^2$ & $\omega$\\
+E$''_1$ & 1 & $\omega$ & $\omega^2$ & $-1$ & $-\omega$ & $-\omega^2$\\
+E$''_2$ & 1 & $\omega^2$ & $\omega$ & $-1$ & $-\omega^2$ & $-\omega$\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+For the dark A$''$ exciton at $\bK$ to emit, a phonon must carry away the
+momentum $\bK$ while a photon is emitted. The exciton must be contained in the
+product of the phonon and the photon,
+\begin{equation}
+\Gamma_{\mathrm{exc}}\subset\Gamma_\nu\otimes\Gamma_{\mathrm{photon}},
+\label{eq:emission}
+\end{equation}
+a form invariant under a change of the C$_3$ axis (the conjugated form
+$\Gamma_\nu\subset\Gamma^*_{\mathrm{exc}}\otimes\Gamma_{\mathrm{photon}}$
+renames the helicities but selects the same branch). In-plane light is E$'$ in
+D$_{3h}$ and splits at $\bK$ into E$'_1\oplus$E$'_2$, one component per helicity.
+For A$''$, a photon of E$'_1$ symmetry requires an E$''_2$ phonon and one of
+E$'_2$ symmetry an E$''_1$ phonon. Only E$''_1$ occurs among the six GaN branches
+at $\bK$ (Table~\ref{tab:phK}), so one branch mediates the emission and its light
+has a single helicity; time reversal gives $\bK'$ the opposite one.
+
+\begin{table}[h]
+\centering\small
+\caption{GaN phonons at $\bK$ (C$_3$ about the \tbd{Ga/N} site) and whether each
+can mediate the emission of the A$''$ exciton under Eq.~(\ref{eq:emission}).}
+\label{tab:phK}
+\begin{tabular}{cccccc}
+\toprule
+Branch & $\hbar\omega$ (meV) & $\omega$ (cm$^{-1}$) & Irrep & $\sigma_h$ & Mediates\\
+\midrule
+1 & 16.2 & 130.8 & E$''_1$ & odd & yes\\
+2 & 17.9 & 145.1 & A$''$ & odd & no\\
+3 & 28.7 & 231.4 & E$'_2$ & even & no\\
+4 & 42.4 & 341.8 & A$'$ & even & no\\
+5 & 93.7 & 756.3 & E$'_1$ & even & no\\
+6 & 100.4 & 810.3 & E$'_2$ & even & no\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\emph{When is the sideband fully polarised?} Let the C$_3$ eigenvalues of the
+two flexural modes at $\bK$ be $\phi_1,\phi_2$ (two of $1,\omega,\omega^2$) and
+that of the dark exciton $\varepsilon$. By Eq.~(\ref{eq:emission}) a photon of
+eigenvalue $\omega$ needs a phonon of eigenvalue $\varepsilon\omega^2$, one of
+eigenvalue $\omega^2$ a phonon of $\varepsilon\omega$. Both helicities have a
+partner only if $\{\varepsilon\omega,\varepsilon\omega^2\}=\{\phi_1,\phi_2\}$,
+i.e.\ only if $\varepsilon$ is the third eigenvalue. If $\varepsilon$ equals
+$\phi_1$ or $\phi_2$, one helicity is available and each valley's sideband is
+fully circularly polarised. Shifting the axis multiplies $\varepsilon,\phi_1,
+\phi_2$ by the same phase, so the criterion is axis-independent. In GaN the two
+flexural modes at $\bK$ are sublattice-polarised (each moves one sublattice),
+E$''_1$ at 16.2~meV and A$''$ at 17.9~meV; the A$''$ exciton ($\varepsilon=1$)
+coincides with the A$''$ mode, so only E$''_1$ mediates.
+
+\subsection{Two classes of planar D$_{3h}$ monolayers}
+In a planar honeycomb binary each band edge is $\pi$-like ($p_z$, odd) or
+$\sigma$-like ($s$, $p_{x,y}$, even), and for an exciton dominated by one
+transition $\chi=p_cp_v$. The valence maximum is the anion $p_z$ state at $\bK$
+(odd); the class is set by the conduction minimum (Table~\ref{tab:classes}).
+\emph{Class~I}: both edges $\pi$-like at $\bK$; the lowest exciton is the bright,
+even E$'$ state at $\Gamma$ and its sidebands are in-plane optical replicas
+(E$'\subset$E$'\otimes$E$'$; the flexural branch is forbidden). \emph{Class~II}:
+a $\sigma$-like conduction band at $\Gamma$ lies lowest; the lowest exciton is
+momentum-dark and odd at $\bK$, on a band disconnected from the bright one, and
+its sideband needs an odd phonon at $\bK$.
+
+\begin{table}[h]
+\centering\small
+\caption{The two classes. Rows marked \tbd{} await the fixed-code runs.}
+\label{tab:classes}
+\begin{tabular}{llllll}
+\toprule
+ & VBM & CBM & lowest exciton & sideband phonon & $|P|$\\
+\midrule
+hBN (I) & $\bK$, N $p_z$, odd & $\bK$, B $p_z$, odd & $\Gamma$, even, E$'$ (5.475 eV) & TO/LO, even & \tbd{0}\\
+SiC (I) & $\bK$, C $p_z$, odd & $\bK$, Si $p_z$, odd & $\Gamma$, even, E$'$ & \tbd{TO/LO} & \tbd{0}\\
+GaN (II) & $\bK$, N $p_z$, odd & $\Gamma$, Ga $s$, even & $\bK$, odd, A$''$ (3.429 eV) & E$''_1$, odd, 16.2 meV & 1.000\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =====================================================================
+\section{Near-degenerate manifolds}
+% =====================================================================
+\label{sec:manifold}
+
+\subsection{Why near-degenerate states mix}
+Let two states of opposite parity be separated by $\Delta$, and let the computed
+BSE Hamiltonian break $\sigma_h$ by a small $\delta$ between them (numerical
+noise). First-order mixing gives an admixture amplitude $\delta/\Delta$, i.e.\
+$|\chi|=1-2(\delta/\Delta)^2$. For $\Delta=0.13$~meV, $\delta\sim10~\mu$eV
+already gives $|\chi|\approx0.99$, and the WSe$_2$ pair came back at 0.915 and
+0.951. Per-state parity then either counts a forbidden residue or excludes the
+states.
+
+\subsection{Splitting by the manifold's parity eigenstates}
+Group the states at each $\bQ$ into manifolds of energies closer than a
+tolerance (\texttt{xphd parity --manifold-tol}, default 5~meV) and compute, with
+Eq.~(\ref{eq:Dexc}), the matrix $M_{mn}=\langle m|\sigma_h|n\rangle$ within each.
+For a closed manifold $M$ is unitary and Hermitian, with eigenvalues $\pm1$;
+its eigenvectors $v_i$ are the parity eigenstates the solver could equally have
+returned. The state $\partial V_\nu|\lambda\rangle$ projected on the manifold is
+$|\psi\rangle=\sum_n G_n|n\rangle$ with $G_n=\langle n|\partial V_\nu|\lambda\rangle$,
+the archive's amplitudes. Its weight on eigenvector $i$ is
+\begin{equation}
+W_i=|\langle v_i|\psi\rangle|^2=\Bigl|\sum_n (v_i)_n^{*}\,G_n\Bigr|^2,
+\qquad \sum_iW_i=\sum_n|G_n|^2 ,
+\end{equation}
+and $W_i$ is allowed or forbidden according to the eigen-parity $\mu_i=\pm1$.
+Nothing is excluded for being mixed; only eigenvectors with $|\mu_i|$ below the
+tolerance remain undefined. The weights in each parity sector,
+$\langle\psi|\tfrac12(1\pm M)|\psi\rangle$, do not depend on the basis within the
+manifold.
+
+\emph{Rotated states.} An archive's final state at $\bQ+\bq$ is the image of its
+irreducible parent, Eq.~(\ref{eq:rotate}). For spatial $R$,
+$R^{-1}\sigma_hR=\sigma_h$ on excitons, so the manifold matrix is the parent's;
+for an operation containing time reversal (antiunitary) it is
+$M^{*}$. (For spinors, $\sigma_h$ anticommutes with $C'_2$ and $\sigma_v$ in the
+double group; the electron and hole each acquire the sign and it cancels for
+the exciton, which is why per-state exciton parity is constant over a star.)
+The time-reversal flag per full-zone point is the one \texttt{xphd generate}
+uses: symmetry index $\ge n_{\mathrm{sym}}/(1+t_{\mathrm{rev}})$.
+
+\emph{Result.} In WSe$_2$ (state 1) the rotation lowers forbidden/allowed from
+$1.4\times10^{-4}$ to $6.3\times10^{-6}$ without excluding anything beyond the 5.9\%
+already undefined. Only 70\% of the eigen-parities lie within 0.02 of $\pm1$.
+
+\subsection{Closure diagnostics}
+An eigen-parity short of $\pm1$ means the manifold is not closed: its partner is
+missing.
+\begin{itemize}[nosep,leftmargin=1.2em]
+\item \emph{Cut by the state count} (\texttt{manifold\_closure.py}): compare the
+eigen-parities of each manifold cut at the archive's state count with those of
+the complete manifold from a parity run with more states. In WSe$_2$, 75.8\%
+within 0.02 either way: the cut is not the cause.
+\item \emph{Partner beyond the tolerance}: widening the manifolds from 5 to
+20~meV changed nothing (75.3\% to 75.0\%).
+\item \emph{Window not closed} (\texttt{window\_closure.py}): $\sigma_h$ maps a band
+partly outside the BSE window when its mirror partner lies outside it. Then the
+row norm $\sum_{j\in\mathrm{window}}|D_{ij}(\sigma_h;\bk)|^2<1$, and every exciton
+built on it maps partly outside the BSE space. \tbd{Run on WSe$_2$.}
+\end{itemize}
+
+\input{partII_b}
+
+\end{document}
