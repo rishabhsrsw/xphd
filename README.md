@@ -1,5 +1,18 @@
 # xphd
 
+  __   _______  _     _____
+  \ \ / /  __ \| |   |  __ \
+   \ V /| |__) | |__ | |  | |
+    > < |  ___/| '_ \| |  | |
+   / . \| |    | | | | |__| |
+  /_/ \_\_|    |_| |_|_____/
+
+  Version 1.0.0  --  Exciton-Phonon Dynamics
+  R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari
+  Indian Institute of Information Technology, Allahabad
+
+  Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, optics, transport
+  
 **Exciton–phonon physics in two-dimensional semiconductors, from first principles.**
 From Quantum ESPRESSO, LetzElPhC and yambo databases, xphd builds exciton–phonon matrix
 elements over the whole Brillouin zone and computes broadening-free exciton linewidths,
