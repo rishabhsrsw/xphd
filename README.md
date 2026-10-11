@@ -11,8 +11,8 @@ R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Inf
 
 <table>
 <tr>
-<td width="44%"><img src="docs/images/exciton_parity_dispersion.png" width="100%"><br>
-<sub><b>Mirror parity of every exciton.</b> The dark minimum at K is odd, the bright doublet at Γ even.</sub></td>
+<td width="44%"><img src="docs/images/electron_parity_dispersion.png" width="100%"><br>
+<sub><b>Mirror parity overlaid on the electron band dispersion.</b> A $\sigma$-like Ga-$s$ conduction band lies below the $\pi^*$ band, opposite in parity to the valence-band maximum, and the gap is indirect.</sub></td>
 <td width="56%"><img src="docs/images/coupling_maps.png" width="100%"><br>
 <sub><b>Coupling, branch by branch.</b> |G|² from the bright exciton; the polar branches (e, f) vanish wherever parity forbids them.</sub></td>
 </tr>
