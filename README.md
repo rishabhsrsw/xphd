@@ -11,7 +11,7 @@ R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Inf
 
 <table>
 <tr>
-<td width="44%"><img src="docs/images/electron_parity_dispersion.pdf" width="100%"><br>
+<td width="44%"><img src="docs/images/electron_parity_dispersion.png" width="100%"><br>
 <sub><b>Mirror parity overlaid on the electron band dispersion.</b> A $\sigma$-like Ga-$s$ conduction band lies below the $\pi^*$ band, opposite in parity to the valence-band maximum, and the gap is indirect.</sub></td>
 <td width="56%"><img src="docs/images/coupling_maps.png" width="100%"><br>
 <sub><b>Coupling, branch by branch.</b> |G|² from the bright exciton; the polar branches (e, f) vanish wherever parity forbids them.</sub></td>
