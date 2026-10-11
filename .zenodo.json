@@ -1,0 +1,33 @@
+{
+  "title": "xphd: exciton-phonon post-processing for two-dimensional semiconductors",
+  "upload_type": "software",
+  "version": "1.1.0",
+  "license": "MIT",
+  "description": "Exciton-phonon post-processing for two-dimensional semiconductors, from Quantum ESPRESSO, LetzElPhC and yambo databases: exciton-phonon matrix elements across the Brillouin zone, broadening-free exciton linewidths, mirror-parity and symmetry analysis, phonon-assisted optics and real-time exciton Boltzmann transport.",
+  "creators": [
+    {
+      "name": "Saraswat, Rishabh",
+      "affiliation": "Indian Institute of Information Technology, Allahabad"
+    },
+    {
+      "name": "Bhattacharya, Sitangshu",
+      "affiliation": "Indian Institute of Information Technology, Allahabad"
+    },
+    {
+      "name": "Verma, Rekha",
+      "affiliation": "Indian Institute of Information Technology, Allahabad"
+    },
+    {
+      "name": "Ansari, Mantasha",
+      "affiliation": "Indian Institute of Information Technology, Allahabad"
+    }
+  ],
+  "keywords": [
+    "exciton-phonon coupling",
+    "exciton linewidth",
+    "Boltzmann transport",
+    "symmetry",
+    "yambo",
+    "LetzElPhC"
+  ]
+}

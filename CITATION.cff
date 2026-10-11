@@ -1,0 +1,26 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+title: "xphd: exciton-phonon post-processing for two-dimensional semiconductors"
+version: 1.1.0
+license: MIT
+type: software
+authors:
+  - family-names: Saraswat
+    given-names: Rishabh
+    affiliation: "Indian Institute of Information Technology, Allahabad"
+  - family-names: Bhattacharya
+    given-names: Sitangshu
+    affiliation: "Indian Institute of Information Technology, Allahabad"
+  - family-names: Verma
+    given-names: Rekha
+    affiliation: "Indian Institute of Information Technology, Allahabad"
+  - family-names: Ansari
+    given-names: Mantasha
+    affiliation: "Indian Institute of Information Technology, Allahabad"
+keywords:
+  - exciton-phonon coupling
+  - exciton linewidth
+  - Boltzmann transport
+  - symmetry
+  - yambo
+  - LetzElPhC
