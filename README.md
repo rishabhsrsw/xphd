@@ -16,6 +16,7 @@ From Quantum ESPRESSO, LetzElPhC and yambo databases, xphd builds exciton–phon
 elements over the whole Brillouin zone and computes broadening-free exciton linewidths,
 mirror-parity selection rules, phonon-assisted luminescence and real-time exciton
 relaxation. Shown here for monolayer GaN.
+Spin-orbit coupling inclusion is under development. HPC usage is being tested, the code works on Windows. 
 
 R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Information Technology, Allahabad
 · version 1.1.0 · MIT licence
