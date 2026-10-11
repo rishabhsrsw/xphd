@@ -24,10 +24,8 @@ luminescence channels, the width against temperature, emission and absorption, a
 
 <table>
 <tr>
-<td width="62%"><img src="docs/images/helicity_sideband.png" width="100%"><br>
+<td width="100%"><img src="docs/images/helicity_sideband.png" width="100%"><br>
 <sub><b>A circularly polarised sideband.</b> The dark exciton emits 16.2 meV below itself, with P = ∓1 in the two valleys.</sub></td>
-<td width="38%"><img src="docs/images/lw_bz_state1.png" width="100%"><br>
-<sub><b>Linewidth over the zone</b>, lowest band, 77 K.</sub></td>
 </tr>
 </table>
 
