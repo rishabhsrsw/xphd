@@ -1,4 +1,5 @@
 # xphd
+
 ```text
   __   _______  _     _____
   \ \ / /  __ \| |   |  __ \
@@ -8,20 +9,33 @@
   /_/ \_\_|    |_| |_|_____/
 
   Version 1.1.0  --  Exciton-Phonon Dynamics
-  Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya
+  Rishabh Saraswat, Mantasha Ansari, Rekha Verma and Sitangshu Bhattacharya
   Indian Institute of Information Technology, Allahabad
+
   If you use xphd, please cite:
-  "R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, Real-time relaxation dynamics of dark excitons in mirror-symmetric monolayers, arXiv:2610.12996 (2026)"
+    - R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, Real-time
+      relaxation dynamics of dark excitons in mirror-symmetric
+      monolayers, arXiv:2610.12996 (2026)
+    - xphd, Zenodo, https://zenodo.org/records/23232733
+
+  Acknowledgements:
+    The authors thank the Anusandhan National Research Foundation (ANRF),
+    India, for support under grant number CRG/2023/000476. This work was
+    carried out using the computational resources of the PARAM Rudra 20 PF
+    HPC system, provided by the Centre for Development of Advanced
+    Computing (C-DAC) under the National Supercomputing Mission (NSM),
+    India, jointly steered by MeitY and DST.
+
+  Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, optics, transport
 ```
+
 **Exciton–phonon physics in two-dimensional semiconductors, from first principles.**
 From Quantum ESPRESSO, LetzElPhC and yambo databases, xphd builds exciton–phonon matrix
 elements over the whole Brillouin zone and computes broadening-free exciton linewidths,
 mirror-parity selection rules, phonon-assisted luminescence and real-time exciton
 relaxation. Shown here for monolayer GaN.
-Spin-orbit coupling inclusion is under development. HPC usage is being tested, the code works on Windows. 
 
-Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya — Indian Institute of Information Technology, Allahabad
-· version 1.1.0 · MIT licence
+## Workflow
 
 ```mermaid
 flowchart TD
@@ -66,8 +80,8 @@ flowchart TD
 
 <table>
 <tr>
-<td width="44%"><img src="docs/images/electron_parity_dispersion.png" width="100%"><br>
-<sub><b>Mirror parity overlaid on the electron band dispersion.</b> A $\sigma$-like Ga-$s$ conduction band lies below the $\pi^*$ band, opposite in parity to the valence-band maximum, and the gap is indirect.</sub></td>
+<td width="44%"><img src="docs/images/exciton_parity_dispersion.png" width="100%"><br>
+<sub><b>Mirror parity of every exciton.</b> The dark minimum at K is odd, the bright doublet at Γ even.</sub></td>
 <td width="56%"><img src="docs/images/coupling_maps.png" width="100%"><br>
 <sub><b>Coupling, branch by branch.</b> |G|² from the bright exciton; the polar branches (e, f) vanish wherever parity forbids them.</sub></td>
 </tr>
@@ -79,8 +93,10 @@ luminescence channels, the width against temperature, emission and absorption, a
 
 <table>
 <tr>
-<td width="100%"><img src="docs/images/helicity_sideband.png" width="100%"><br>
+<td width="62%"><img src="docs/images/helicity_sideband.png" width="100%"><br>
 <sub><b>A circularly polarised sideband.</b> The dark exciton emits 16.2 meV below itself, with P = ∓1 in the two valleys.</sub></td>
+<td width="38%"><img src="docs/images/lw_bz_state1.png" width="100%"><br>
+<sub><b>Linewidth over the zone</b>, lowest band, 77 K.</sub></td>
 </tr>
 </table>
 
@@ -111,10 +127,16 @@ cluster's MPI (`scripts/hpc/install_cluster.sh`).
 
 ## Citing
 
-If you use xphd, please cite the software record on Zenodo
-([zenodo.org/records/23232733](https://zenodo.org/records/23232733)); `CITATION.cff` has the details.
+If you use xphd, please cite
+
+- R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, Real-time relaxation dynamics of dark
+  excitons in mirror-symmetric monolayers, [arXiv:2610.12996](https://arxiv.org/abs/2610.12996) (2026)
+- the software record on Zenodo, [zenodo.org/records/23232733](https://zenodo.org/records/23232733);
+  `CITATION.cff` has the details.
 
 ## Acknowledgements
 
-The authors thank
-the Anusandhan National Research Foundation (ANRF), India, for support under grant number CRG/2023/000476. This work was carried out using the computational resources of the PARAM Rudra 20 PF HPC system, provided by the Centre for Development of Advanced Computing (C-DAC) under the National Supercomputing Mission (NSM), India, jointly steered by MeitY and DST.
+The authors thank the Anusandhan National Research Foundation (ANRF), India, for support
+under grant number CRG/2023/000476. This work was carried out using the computational resources of
+the PARAM Rudra 20 PF HPC system, provided by the Centre for Development of Advanced Computing (C-DAC)
+under the National Supercomputing Mission (NSM), India, jointly steered by MeitY and DST.
