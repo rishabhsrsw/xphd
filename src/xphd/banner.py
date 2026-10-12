@@ -22,21 +22,9 @@ PIPELINE = "Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, opti
 
 # ==========================================================================
 # CITATION -- printed in the banner of every xphd command.
-#
-# PAPER: the article describing xphd. Put the arXiv reference here when the
-#   preprint is posted, and replace it with the journal reference once the
-#   paper is published. Leave it "" until then: the line is then not shown.
-#   Example (edit the arXiv number):
 #   PAPER = ("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
 #            "Real-time relaxation dynamics of dark excitons in "
 #            "mirror-symmetric monolayers, arXiv:2610.xxxxx (2026)")
-#   and after publication, e.g.
-#   PAPER = ("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
-#            "Phys. Rev. Lett. xxx, xxxxxx (2027)")
-#
-# SOFTWARE: the archived code. Keep the Zenodo record; switch to the DOI
-#   (https://doi.org/10.5281/zenodo.xxxxxxx) if you prefer it.
-# ==========================================================================
 PAPER = ""
 SOFTWARE = "xphd, Zenodo, https://zenodo.org/records/23232733"
 
