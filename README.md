@@ -10,6 +10,9 @@
   Version 1.1.0  --  Exciton-Phonon Dynamics
   Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya
   Indian Institute of Information Technology, Allahabad
+  PAPER = ("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
+            "Real-time relaxation dynamics of dark excitons in "
+            "mirror-symmetric monolayers, arXiv:2610.12996 (2026)")
 ```
 **Exciton–phonon physics in two-dimensional semiconductors, from first principles.**
 From Quantum ESPRESSO, LetzElPhC and yambo databases, xphd builds exciton–phonon matrix
