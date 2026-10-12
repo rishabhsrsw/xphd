@@ -8,7 +8,7 @@
   /_/ \_\_|    |_| |_|_____/
 
   Version 1.1.0  --  Exciton-Phonon Dynamics
-  R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari
+  Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya
   Indian Institute of Information Technology, Allahabad
 ```
 **Exciton–phonon physics in two-dimensional semiconductors, from first principles.**
@@ -18,7 +18,7 @@ mirror-parity selection rules, phonon-assisted luminescence and real-time excito
 relaxation. Shown here for monolayer GaN.
 Spin-orbit coupling inclusion is under development. HPC usage is being tested, the code works on Windows. 
 
-R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Information Technology, Allahabad
+Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya — Indian Institute of Information Technology, Allahabad
 · version 1.1.0 · MIT licence
 
 ```mermaid
