@@ -114,7 +114,7 @@ cluster's MPI (`scripts/hpc/install_cluster.sh`).
 If you use xphd, please cite the software record on Zenodo
 ([zenodo.org/records/23232733](https://zenodo.org/records/23232733)); `CITATION.cff` has the details.
 
-Acknowledgements
+## Acknowledgements
 
 The authors thank
 the Anusandhan National Research Foundation (ANRF), India, for support under grant number CRG/2023/000476. This work was carried out using the computational resources of the PARAM Rudra 20 PF HPC system, provided by the Centre for Development of Advanced Computing (C-DAC) under the National Supercomputing Mission (NSM), India, jointly steered by MeitY and DST.
