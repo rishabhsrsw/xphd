@@ -25,7 +25,9 @@ PIPELINE = "Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, opti
 #   PAPER = ("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
 #            "Real-time relaxation dynamics of dark excitons in "
 #            "mirror-symmetric monolayers, arXiv:2610.xxxxx (2026)")
-PAPER = ""
+PAPER = "("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
+            "Real-time relaxation dynamics of dark excitons in "
+            "mirror-symmetric monolayers, arXiv:2610.12996 (2026)")"
 SOFTWARE = "xphd, Zenodo, https://zenodo.org/records/23232733"
 
 WIDTH = 78                      # citation lines are wrapped to this width
