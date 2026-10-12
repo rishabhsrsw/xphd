@@ -5,6 +5,7 @@ import os
 import platform
 import random
 import sys
+import textwrap
 import time
 
 ART = {
@@ -14,9 +15,28 @@ ART = {
 }
 
 TAGLINE = "Exciton-Phonon Dynamics"
-AUTHORS = ("R. Saraswat", "S. Bhattacharya", "R. Verma", "M. Ansari")
+AUTHORS = ("Rishabh Saraswat", "Mantasha Ansari", "Rekha Verma",
+           "Sitangshu Bhattacharya")
 AFFILIATION = "Indian Institute of Information Technology, Allahabad"
 PIPELINE = "Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, optics, transport"
+
+PAPER = "("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
+            "Real-time relaxation dynamics of dark excitons in "
+            "mirror-symmetric monolayers, arXiv:2610.12996 (2026)")"
+SOFTWARE = "xphd, Zenodo, https://zenodo.org/records/23232733"
+
+WIDTH = 78                      # citation lines are wrapped to this width
+
+
+def _citation_lines():
+    refs = [r for r in (PAPER, SOFTWARE) if r and r.strip()]
+    if not refs:
+        return []
+    out = ["  If you use xphd in published work, please cite:"]
+    for r in refs:
+        out += textwrap.wrap(r.strip(), WIDTH - 6,
+                             initial_indent="    - ", subsequent_indent="      ")
+    return out
 
 
 def banner_text(version: str, argv=None, face: str | None = None) -> str:
@@ -33,8 +53,11 @@ def banner_text(version: str, argv=None, face: str | None = None) -> str:
               f"  Version {version}  --  {TAGLINE}",
               f"  {', '.join(AUTHORS[:-1])} and {AUTHORS[-1]}",
               f"  {AFFILIATION}",
-              "",
-              f"  {PIPELINE}",
+              ""]
+    cite = _citation_lines()
+    if cite:
+        lines += cite + [""]
+    lines += [f"  {PIPELINE}",
               f"  python {platform.python_version()} | numpy {npv} | "
               f"{time.strftime('%Y-%m-%d %H:%M')}"]
     if argv:

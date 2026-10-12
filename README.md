@@ -8,7 +8,7 @@
   /_/ \_\_|    |_| |_|_____/
 
   Version 1.1.0  --  Exciton-Phonon Dynamics
-  R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari
+  Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya
   Indian Institute of Information Technology, Allahabad
 ```
 **Exciton–phonon physics in two-dimensional semiconductors, from first principles.**
@@ -18,8 +18,49 @@ mirror-parity selection rules, phonon-assisted luminescence and real-time excito
 relaxation. Shown here for monolayer GaN.
 Spin-orbit coupling inclusion is under development. HPC usage is being tested, the code works on Windows. 
 
-R. Saraswat, S. Bhattacharya, R. Verma and M. Ansari — Indian Institute of Information Technology, Allahabad
+Rishabh Saraswat, and Mantasha Ansari, and Rekha Verma and Sitangshu Bhattacharya — Indian Institute of Information Technology, Allahabad
 · version 1.1.0 · MIT licence
+
+```mermaid
+flowchart TD
+    scf["<b>pw.x</b> · scf"]
+    ph["<b>ph.x</b> · DFPT phonons"]
+    nscf["<b>pw.x</b> · nscf → yambo SAVE"]
+    q2r["<b>q2r.x · matdyn.x</b><br/>phonons on a fine q-mesh"]
+    lel["<b>LetzElPhC</b><br/>electron–phonon matrix elements"]
+    gw["<b>yambo</b> · GW + BSE<br/>excitons at finite Q"]
+    hw["<b>xphd matdyn</b><br/>fine-mesh phonon energies"]
+    gen["<b>xphd dmats · generate</b><br/>exciton–phonon archives, one per Q"]
+    lw["<b>linewidth · sweep</b><br/>Γ(Q, T)"]
+    sym["<b>parity · irreps</b><br/>selection-rule"]
+    opt["<b>dipoles</b><br/>phonon sideband, helicity"]
+    bte["<b>bte</b><br/>real-time populations"]
+
+    scf --> ph
+    scf --> nscf
+    ph --> q2r
+    ph --> lel
+    nscf --> lel
+    nscf --> gw
+    q2r --> hw
+    lel --> gen
+    gw --> gen
+    gen --> lw
+    gen --> sym
+    gen --> opt
+    gen --> bte
+    hw -.-> lw
+    hw -.-> bte
+
+    classDef qe fill:#E8EEF7,stroke:#6C8EBF,color:#1B2A41
+    classDef yb fill:#F8E7E6,stroke:#B85450,color:#1B2A41
+    classDef le fill:#EFE8F4,stroke:#9673A6,color:#1B2A41
+    classDef xp fill:#E5F1EA,stroke:#2E7D4F,color:#1B2A41
+    class scf,ph,nscf,q2r qe
+    class gw yb
+    class lel le
+    class hw,gen,lw,sym,opt,bte xp
+```
 
 <table>
 <tr>
