@@ -20,11 +20,6 @@ AUTHORS = ("Rishabh Saraswat", "Mantasha Ansari", "Rekha Verma",
 AFFILIATION = "Indian Institute of Information Technology, Allahabad"
 PIPELINE = "Quantum ESPRESSO + LetzElPhC + yambo  ->  linewidths, symmetry, optics, transport"
 
-# ==========================================================================
-# CITATION -- printed in the banner of every xphd command.
-#   PAPER = ("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
-#            "Real-time relaxation dynamics of dark excitons in "
-#            "mirror-symmetric monolayers, arXiv:2610.xxxxx (2026)")
 PAPER = "("R. Saraswat, M. Ansari, R. Verma and S. Bhattacharya, "
             "Real-time relaxation dynamics of dark excitons in "
             "mirror-symmetric monolayers, arXiv:2610.12996 (2026)")"
